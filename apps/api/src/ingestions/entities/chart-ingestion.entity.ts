@@ -44,9 +44,6 @@ export class ChartIngestion {
   @Column({ name: 'archive_storage_path', nullable: true, type: 'text' })
   archiveStoragePath!: string | null;
 
-  @Column({ name: 'source_object_key', nullable: true, type: 'text' })
-  sourceObjectKey!: string | null;
-
   @Column({
     default: () => "'[]'::jsonb",
     name: 'source_cells',

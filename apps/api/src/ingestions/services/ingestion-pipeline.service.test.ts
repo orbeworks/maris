@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -137,45 +135,4 @@ test('run persists a processing failure without publishing it', async () => {
   await pipeline.run(JOB);
 
   assert.deepEqual(calls, ['processing', `failed:${JOB.ingestionId}`]);
-});
-
-test('URL job downloads the source into object storage once and then follows the same pipeline', async () => {
-  const storageDirectory = await mkdtemp(path.join(tmpdir(), 'maris-url-worker-'));
-  const downloaded = path.join(storageDirectory, 'source.zip');
-  let present = false;
-  let putUrlCalls = 0;
-  const calls: string[] = [];
-  const catalog = {
-    findIngestion: async (id: string) => {
-      calls.push(`find:${id}`);
-      return present ? { id, status: 'received', versionId: 'version-id', versionKey: 'soundg-version-id' } : null;
-    },
-    createIngestion: async (input: { ingestionId: string; storagePath: string }) => {
-      present = true;
-      return { id: input.ingestionId, status: 'received', versionId: 'version-id', versionKey: 'soundg-version-id', storagePath: input.storagePath };
-    },
-    claimForProcessing: async () => true,
-    markProcessing: async () => calls.push('processing'),
-    markReady: async () => calls.push('ready'),
-    publishReadyVersion: async () => calls.push('publish'),
-    markFailed: async () => calls.push('failed'),
-  } as never;
-  const objectStorage = {
-    tryHead: async () => present ? { ContentLength: 3 } : null,
-    putUrl: async () => { putUrlCalls += 1; present = true; await writeFile(downloaded, 'zip'); },
-    head: async () => ({ ContentLength: 3 }),
-    downloadToFile: async (_key: string, destination: string) => { await writeFile(destination, 'zip'); },
-  } as never;
-  const pipeline = new IngestionPipelineService(
-    { getOrThrow: (key: string) => key === 'STORAGE_DIR' ? storageDirectory : '/chart-storage' } as ConfigService,
-    catalog,
-    { inspect: async () => ({}) } as never,
-    { process: async () => RESULT } as never,
-    objectStorage,
-  );
-
-  await pipeline.run({ ...JOB, archivePath: '', objectKey: 'sources/test.zip', sourceUrl: 'https://example.com/test.zip' });
-  assert.equal(putUrlCalls, 1);
-  assert.deepEqual(calls.slice(-3), ['processing', 'ready', 'publish']);
-  await rm(storageDirectory, { recursive: true, force: true });
 });

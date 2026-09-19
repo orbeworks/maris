@@ -8,7 +8,6 @@ import { IngestionsModule } from './ingestions/ingestions.module.js';
 import { TilesModule } from './tiles/tiles.module.js';
 import { WeatherModule } from './weather/weather.module.js';
 import { ChartsModule } from './charts/charts.module.js';
-import { StorageModule } from './storage/storage.module.js';
 import { RequestTimingMiddleware } from './request-timing.middleware.js';
 
 @Module({
@@ -23,7 +22,7 @@ import { RequestTimingMiddleware } from './request-timing.middleware.js';
     IngestionsModule,
     TilesModule,
     WeatherModule,
-    ChartsModule, StorageModule,
+    ChartsModule,
   ],
 })
 export class AppModule implements NestModule {

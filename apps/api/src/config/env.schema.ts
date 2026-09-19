@@ -40,11 +40,6 @@ export const envSchema = Joi.object({
     .default(1024 * 1024 * 1024),
   GFS_PARSER_PYTHON: Joi.string().default('python3'),
   GFS_PARSER_SCRIPT: Joi.string().default('apps/api/scripts/gfs-grib-parser.py'),
-  ENC_S3_ENDPOINT: Joi.string().uri().allow('').default(''),
-  ENC_S3_REGION: Joi.string().default('auto'),
-  ENC_S3_BUCKET: Joi.string().allow('').default(''),
-  ENC_S3_ACCESS_KEY_ID: Joi.string().allow('').default(''),
-  ENC_S3_SECRET_ACCESS_KEY: Joi.string().allow('').default(''),
 }).unknown(true);
 
 export function validateEnv(config: Record<string, unknown>) {

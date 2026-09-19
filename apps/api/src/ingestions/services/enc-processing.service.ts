@@ -1,15 +1,14 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProcessingCleanupService } from './processing-cleanup.service.js';
 import { EncArchiveService } from './enc-archive.service.js';
 import { coverageCells } from '../../charts/models/chart-selection.js';
-import { ObjectStorageService } from '../../storage/object-storage.service.js';
 
 import type {
   EncMetadataFeature,
@@ -35,11 +34,7 @@ export class EncProcessingService {
     @Inject(ProcessingCleanupService)
     private readonly cleanup: ProcessingCleanupService = new ProcessingCleanupService(config),
     @Inject(EncArchiveService)
-    @Optional()
     protected readonly archiveService: EncArchiveService = new EncArchiveService(config),
-    @Inject(ObjectStorageService)
-    @Optional()
-    private readonly objectStorage?: ObjectStorageService,
   ) {
     this.storageDirectory = path.resolve(
       config.getOrThrow<string>('STORAGE_DIR'),
@@ -70,7 +65,6 @@ export class EncProcessingService {
       const cells: ProcessedCell[] = [];
       let soundingCellCount = 0;
       let geopackageCreated = false;
-      const encCellsObjectPrefix = `datasets/soundg/${job.versionKey}/enc-cells/`;
       for (const entry of archive.cells.sort((a,b) => a.name.localeCompare(b.name))) {
         await rm(extractedDirectory, { force: true, recursive: true });
         await mkdir(extractedDirectory, { recursive: true });
@@ -80,28 +74,6 @@ export class EncProcessingService {
         const cellName = entry.name;
         const updatesApplied = entry.updateNumbers;
         const { hasSoundings, ...metadata } = await this.readCellMetadata(cell);
-        // Preserve every S-57 feature class in a per-cell artifact. The
-        // SOUNDG GeoPackage below remains specialized for the existing tile
-        // generator, but no ENC layer is discarded and the worker never has
-        // to hold a multi-gigabyte all-USA GeoPackage on its volume.
-        const cellGeoPackage = path.join(extractedDirectory, `${entry.name}.gpkg`);
-        await this.run('ogr2ogr', [
-          '-f', 'GPKG',
-          cellGeoPackage,
-          cell,
-          '-oo', 'SPLIT_MULTIPOINT=ON',
-          '-oo', 'ADD_SOUNDG_DEPTH=ON',
-          '-oo', 'UPDATES=APPLY',
-        ]);
-        if (this.objectStorage) {
-          const cellObjectKey = `${encCellsObjectPrefix}${entry.name}.gpkg`;
-          const existingCell = await this.objectStorage.tryHead(cellObjectKey);
-          if (!existingCell) {
-            await this.objectStorage.putFile(cellObjectKey, cellGeoPackage, 'application/geopackage+sqlite3');
-          }
-          const cellHead = await this.objectStorage.head(cellObjectKey);
-          if (Number(cellHead.ContentLength ?? 0) <= 0) throw new Error(`Published ENC cell is empty: ${entry.name}`);
-        }
         if (hasSoundings) {
           const arguments_ = [
             ...(geopackageCreated ? ['-update', '-append'] : []),
@@ -128,7 +100,7 @@ export class EncProcessingService {
           updatesApplied,
         });
         // Never retain an extracted cell between batches. The source ZIP remains
-        // in object storage and is reopened lazily for the next cell.
+        // on the Railway volume and is reopened lazily for the next cell.
         await rm(extractedDirectory, { force: true, recursive: true });
       }
 
@@ -138,29 +110,13 @@ export class EncProcessingService {
         job.versionKey,
       );
       const manifestPath = path.posix.join(storagePath, 'manifest.json');
-      let existingManifest = await this.readManifestIfPresent(manifestPath);
-      const remotePrefix = `datasets/soundg/${job.versionKey}`;
-      if (!existingManifest && this.objectStorage) {
-        const remoteManifest = await this.objectStorage.tryHead(`${remotePrefix}/manifest.json`);
-        const remoteArtifact = await this.objectStorage.tryHead(`${remotePrefix}/tiles.pmtiles`);
-        if (remoteManifest && remoteArtifact) {
-          const localRoot = path.join(this.chartStorageDirectory, storagePath);
-          await mkdir(localRoot, { recursive: true });
-          await this.objectStorage.downloadToFile(`${remotePrefix}/manifest.json`, path.join(localRoot, 'manifest.json'));
-          await this.objectStorage.downloadToFile(`${remotePrefix}/tiles.pmtiles`, path.join(localRoot, 'tiles.pmtiles'));
-          existingManifest = await this.readManifestIfPresent(manifestPath);
-        }
-      }
+      const existingManifest = await this.readManifestIfPresent(manifestPath);
       if (existingManifest) {
-        const remote = this.objectStorage
-          ? await this.publishArtifacts(job.versionKey, path.join(this.chartStorageDirectory, storagePath))
-          : undefined;
         return {
           bounds: existingManifest.bounds,
           cells,
           manifestPath,
           storagePath,
-          ...(remote ?? {}),
         };
       }
 
@@ -209,12 +165,6 @@ export class EncProcessingService {
         ),
       ) as GeneratedManifest;
 
-      if (this.objectStorage) {
-        const localRoot = path.join(this.chartStorageDirectory, storagePath);
-        const remote = await this.publishArtifacts(job.versionKey, localRoot);
-        return { bounds: manifest.bounds, cells, manifestPath, storagePath, encObjectKey: encCellsObjectPrefix, ...remote };
-      }
-
       return { bounds: manifest.bounds, cells, manifestPath, storagePath };
     } finally {
       await Promise.all([
@@ -236,26 +186,6 @@ export class EncProcessingService {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
-  }
-
-  private async publishArtifacts(versionKey: string, localRoot: string) {
-    if (!this.objectStorage) return undefined;
-    const artifactObjectKey = `datasets/soundg/${versionKey}/tiles.pmtiles`;
-    const manifestObjectKey = `datasets/soundg/${versionKey}/manifest.json`;
-    const localArtifact = path.join(localRoot, 'tiles.pmtiles');
-    const expectedSize = (await stat(localArtifact)).size;
-    const existingArtifact = await this.objectStorage.tryHead(artifactObjectKey);
-    if (!existingArtifact || Number(existingArtifact.ContentLength ?? 0) !== expectedSize) {
-      await this.objectStorage.putFile(artifactObjectKey, localArtifact, 'application/vnd.pmtiles');
-    }
-    if (!await this.objectStorage.tryHead(manifestObjectKey)) {
-      await this.objectStorage.putFile(manifestObjectKey, path.join(localRoot, 'manifest.json'), 'application/json');
-    }
-    const head = await this.objectStorage.head(artifactObjectKey);
-    if (Number(head.ContentLength ?? 0) !== expectedSize) throw new Error('Published PMTiles object failed validation');
-    const manifestHead = await this.objectStorage.head(manifestObjectKey);
-    if (Number(manifestHead.ContentLength ?? 0) <= 0) throw new Error('Published PMTiles manifest is empty');
-    return { artifactObjectKey, manifestObjectKey };
   }
 
   private async findFiles(directory: string): Promise<string[]> {

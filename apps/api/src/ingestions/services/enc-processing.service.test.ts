@@ -46,7 +46,7 @@ test('accepts metadata from the real US3FL1DF cell without SOUNDG',
     assert.ok(result.metadata.coverage.length);
   });
 
-test('mixed archive keeps every cell but creates GPKG from the first cell containing SOUNDG', async () => {
+test('mixed archive keeps every cell but creates GPKG from cells containing SOUNDG', async () => {
   await checkArchive(['EMPTY', 'SOUND1', 'SOUND2'], false);
 });
 
@@ -111,7 +111,7 @@ async function checkArchive(names: string[], failConversion: boolean) {
       assert.ok(!commands.some(([command]) => command === process.execPath));
     } else if (names.every((name) => name === 'EMPTY')) {
       await assert.rejects(processing, /No SOUNDG layer found/);
-      assert.equal(commands.length, 1, 'all ENC layers are preserved even when SOUNDG is absent');
+      assert.equal(commands.length, 0, 'no conversion is needed when SOUNDG is absent');
     } else {
       const result = await processing;
       assert.deepEqual(result.cells.map((cell) => cell.name), names);

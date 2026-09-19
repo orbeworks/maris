@@ -21,8 +21,6 @@
     "test": "tsx --test src/ingestions/services/*.test.ts src/weather/*.test.ts src/charts/*.test.ts src/charts/models/*.test.ts test/*.test.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1135.0",
-    "@aws-sdk/s3-request-presigner": "^3.1135.0",
     "@nestjs/common": "12.0.3",
     "@nestjs/config": "12.0.0",
     "@nestjs/core": "12.0.3",
