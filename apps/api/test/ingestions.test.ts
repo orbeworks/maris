@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { ConfigService } from '@nestjs/config';
+import { NotFoundException } from '@nestjs/common';
 import { zipSync } from 'fflate';
 import { newDb } from 'pg-mem';
 import 'reflect-metadata';
@@ -415,4 +416,16 @@ test('TileJSON resolves the active version from PostgreSQL', async () => {
     await database.destroy();
     await rm(directory, { force: true, recursive: true });
   }
+});
+
+test('TileJSON returns not found when no ENC version is published', async () => {
+  const tiles = new TilesService(
+    {} as never,
+    { getActiveVersion: async () => null } as never,
+  );
+
+  await assert.rejects(
+    tiles.getTileJson('https://api.example.test'),
+    NotFoundException,
+  );
 });

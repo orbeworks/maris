@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 
 import { ChartCatalogService } from '../ingestions/services/chart-catalog.service.js';
 import type { TileJsonDto } from './dtos/tile-json.dto.js';
@@ -27,7 +32,7 @@ export class TilesService {
 
   async getTileJson(baseUrl: string): Promise<TileJsonDto> {
     const active = await this.catalog.getActiveVersion('soundg');
-    if (!active) throw new Error('No published SOUNDG version');
+    if (!active) throw new NotFoundException('No published SOUNDG version');
     const manifest = await this.chartStorage.getManifest(
       'soundg',
       active.version_key,
