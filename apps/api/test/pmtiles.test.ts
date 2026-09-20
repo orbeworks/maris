@@ -97,7 +97,9 @@ test('streaming PMTiles generation preserves MVT contents and publishes only arc
     await assert.rejects(storage.getTile('soundg', 'missing', 14, 0, 0));
     const module = await Test.createTestingModule({
       controllers: [TilesController],
-      providers: [{ provide: TilesService, useValue: new TilesService(storage, {} as ChartCatalogService) }],
+      providers: [{ provide: TilesService, useValue: new TilesService(storage, {
+        getPublishedCatalog: async () => null,
+      } as unknown as ChartCatalogService) }],
     }).compile();
     const app = module.createNestApplication();
     await app.init();

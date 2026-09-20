@@ -62,10 +62,7 @@ export class TilesService {
         // Old app/offline snapshots may still contain an ingestion UUID whose
         // artifact has already been retired. Resolve those URLs through the
         // current catalog so installed clients do not need a binary update.
-        if (
-          error instanceof NotFoundException &&
-          this.catalog.getPublishedCatalog
-        ) {
+        if (error instanceof NotFoundException) {
           return this.getLatestTile(z, x, y);
         }
         throw error;
