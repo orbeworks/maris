@@ -1,46 +1,45 @@
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { constants, createReadStream } from 'node:fs';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import {
   access,
+  constants,
   mkdir,
-  open,
   readFile,
   rename,
   rm,
   stat,
   writeFile,
 } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
-
-import geojsonvt from 'geojson-vt';
-import vtpbf from 'vt-pbf';
+import { createInterface } from 'node:readline';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 import type { TilesetManifest } from '../src/tiles/storage/chart-storage.js';
-import { ChartSelection, CHART_SELECTION_POLICY, type CoverageCell } from '../src/charts/models/chart-selection.js';
+import {
+  ChartSelection,
+  CHART_SELECTION_POLICY,
+  type CoverageCell,
+} from '../src/charts/models/chart-selection.js';
 
 const DATASET = 'soundg';
 const MIN_ZOOM = 8;
 const MAX_ZOOM = 16;
 const SAFE_VERSION = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+const FIELDS = [
+  'DEPTH', 'RCID', 'LNAM', 'SORDAT', 'SORIND', 'SOURCE_CELL',
+  'SOURCE_EDITION', 'SOURCE_UPDATE',
+];
 
-type GeoJsonProperties = Record<string, unknown>;
-type SoundingsGeoJson = GeoJSON.FeatureCollection<
-  GeoJSON.Point,
-  GeoJsonProperties
->;
-type TileIndex = ReturnType<typeof geojsonvt>;
-type VectorTile = NonNullable<ReturnType<TileIndex['getTile']>>;
-type TileEncoder = (layers: Record<string, VectorTile>) => Uint8Array;
+type SoundingFeature = GeoJSON.Feature<GeoJSON.Point, Record<string, unknown>>;
 type Options = {
+  coverage?: string;
   input: string;
+  layer?: string;
   sampling: 'none' | 'legacy-v1';
   storageDirectory: string;
   version: string;
-  coverage?: string;
 };
 
 function parseArguments(): Options {
@@ -62,7 +61,7 @@ function parseArguments(): Options {
   const sampling = values.get('--sampling') ?? 'none';
   if (!input || !storageDirectory || !version) {
     throw new Error(
-      'Usage: build-soundg-tiles --input <geojson> --storage-dir <dir> --version <id> [--sampling none|legacy-v1]',
+      'Usage: build-soundg-tiles --input <dataset> --storage-dir <dir> --version <id> [--layer soundings] [--coverage cells.json]',
     );
   }
   if (!SAFE_VERSION.test(version)) throw new Error('Invalid version identifier');
@@ -75,70 +74,10 @@ function parseArguments(): Options {
     sampling,
     storageDirectory: path.resolve(storageDirectory),
     version,
-    ...(values.get('--coverage') ? { coverage: path.resolve(values.get('--coverage')!) } : {}),
-  };
-}
-
-function calculateBounds(source: SoundingsGeoJson) {
-  let west = Infinity;
-  let south = Infinity;
-  let east = -Infinity;
-  let north = -Infinity;
-
-  for (const feature of source.features) {
-    const [longitude, latitude] = feature.geometry.coordinates;
-    if (longitude === undefined || latitude === undefined) continue;
-    west = Math.min(west, longitude);
-    south = Math.min(south, latitude);
-    east = Math.max(east, longitude);
-    north = Math.max(north, latitude);
-  }
-  if (![west, south, east, north].every(Number.isFinite)) {
-    throw new Error('GeoJSON has no valid point coordinates');
-  }
-  return [west, south, east, north] as [number, number, number, number];
-}
-
-function longitudeToTile(longitude: number, zoom: number) {
-  return Math.floor(((longitude + 180) / 360) * 2 ** zoom);
-}
-
-function latitudeToTile(latitude: number, zoom: number) {
-  const radians = (latitude * Math.PI) / 180;
-  return Math.floor(
-    ((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2) * 2 ** zoom,
-  );
-}
-
-function tileRange(
-  bounds: [number, number, number, number],
-  zoom: number,
-) {
-  const [west, south, east, north] = bounds;
-  const limit = 2 ** zoom - 1;
-  const clamp = (value: number) => Math.max(0, Math.min(limit, value));
-  return {
-    maxX: clamp(longitudeToTile(east, zoom) + 1),
-    maxY: clamp(latitudeToTile(south, zoom) + 1),
-    minX: clamp(longitudeToTile(west, zoom) - 1),
-    minY: clamp(latitudeToTile(north, zoom) - 1),
-  };
-}
-
-function legacySampling(tile: VectorTile, zoom: number): VectorTile {
-  const sampling = zoom <= 9 ? 16 : zoom <= 10 ? 8 : zoom <= 11 ? 4 : 1;
-  if (sampling === 1) return tile;
-
-  return {
-    ...tile,
-    features: tile.features.filter((feature) => {
-      const id = String(feature.tags?.RCID ?? feature.id ?? '0');
-      let hash = 0;
-      for (const character of id) {
-        hash = (hash * 31 + character.charCodeAt(0)) | 0;
-      }
-      return Math.abs(hash) % sampling === 0;
-    }),
+    ...(values.get('--coverage')
+      ? { coverage: path.resolve(values.get('--coverage')!) }
+      : {}),
+    ...(values.get('--layer') ? { layer: values.get('--layer')! } : {}),
   };
 }
 
@@ -151,26 +90,212 @@ async function pathExists(filePath: string) {
   }
 }
 
-async function build(options: Options) {
-  const source = JSON.parse(
-    await readFile(options.input, 'utf8'),
-  ) as SoundingsGeoJson;
-  const inputFeatureCount = source.features.length;
-  if (options.coverage) {
-    const cells = JSON.parse(await readFile(options.coverage, 'utf8')) as CoverageCell[];
-    const selection = new ChartSelection(cells);
-    source.features = source.features.filter((feature) =>
-      selection.at(feature.geometry.coordinates as [number, number])?.name === feature.properties.SOURCE_CELL);
-  }
-  const bounds = calculateBounds(source);
-  const index: TileIndex = geojsonvt(source, {
-    buffer: 64,
-    extent: 4096,
-    // Pre-indexing is unnecessary: consume each subtree once, then release it.
-    indexMaxZoom: 0,
-    maxZoom: MAX_ZOOM,
-    tolerance: 3,
+function processFailure(label: string, code: number | null, stderr: string) {
+  return new Error(
+    `${label} failed (${code ?? 'signal'}): ${stderr.trim() || 'no diagnostics'}`,
+  );
+}
+
+function waitForProcess(
+  child: ReturnType<typeof spawn>,
+  label: string,
+  stderr: { value: string },
+) {
+  return new Promise<void>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code === 0) resolve();
+      else reject(processFailure(label, code, stderr.value));
+    });
   });
+}
+
+function captureStderr(child: ReturnType<typeof spawn>) {
+  const captured = { value: '' };
+  child.stderr?.on('data', (chunk: Buffer) => {
+    captured.value = `${captured.value}${chunk.toString('utf8')}`.slice(
+      -64 * 1024,
+    );
+  });
+  return captured;
+}
+
+async function writeWithBackpressure(
+  stream: NodeJS.WritableStream,
+  value: string,
+) {
+  if (stream.write(value)) return;
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => {
+      stream.removeListener('drain', onDrain);
+      stream.removeListener('error', onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    stream.once('drain', onDrain);
+    stream.once('error', onError);
+  });
+}
+
+function legacyKeep(feature: SoundingFeature) {
+  const id = String(feature.properties?.RCID ?? feature.id ?? '0');
+  let hash = 0;
+  for (const character of id) {
+    hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  }
+  return Math.abs(hash) % 16 === 0;
+}
+
+async function streamToMbtiles(
+  options: Options,
+  mbtiles: string,
+  temporaryDatabase: string,
+  filteredSequence: string,
+) {
+  const selection = options.coverage
+    ? new ChartSelection(
+        JSON.parse(await readFile(options.coverage, 'utf8')) as CoverageCell[],
+      )
+    : null;
+  const readerArguments = [
+    '-f',
+    'GeoJSONSeq',
+    '/vsistdout/',
+    options.input,
+    ...(options.layer ? [options.layer] : []),
+    '-dim',
+    'XY',
+    '-lco',
+    'RS=NO',
+    '-lco',
+    'COORDINATE_PRECISION=6',
+  ];
+  const writerArguments = [
+    '-f',
+    'MVT',
+    mbtiles,
+    '-if',
+    'GeoJSONSeq',
+    filteredSequence,
+    '-nln',
+    'soundings',
+    '-dsco',
+    'FORMAT=MBTILES',
+    '-dsco',
+    `MINZOOM=${MIN_ZOOM}`,
+    '-dsco',
+    `MAXZOOM=${MAX_ZOOM}`,
+    '-dsco',
+    'COMPRESS=YES',
+    '-dsco',
+    `TEMPORARY_DB=${temporaryDatabase}`,
+    '-dsco',
+    'MAX_SIZE=30000000',
+    '-dsco',
+    'MAX_FEATURES=1000000',
+    '-dsco',
+    'BUFFER=64',
+    '-dsco',
+    'EXTENT=4096',
+  ];
+
+  const reader = spawn('ogr2ogr', readerArguments, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const readerError = captureStderr(reader);
+  const readerDone = waitForProcess(
+    reader,
+    'GDAL GeoJSONSeq reader',
+    readerError,
+  );
+  if (!reader.stdout) throw new Error('GDAL streaming output is unavailable');
+  const filtered = createWriteStream(filteredSequence, { flags: 'wx' });
+  const filteredDone = new Promise<void>((resolve, reject) => {
+    filtered.once('finish', resolve);
+    filtered.once('error', reject);
+  });
+
+  let inputFeatureCount = 0;
+  let retainedFeatureCount = 0;
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  try {
+    const lines = createInterface({ input: reader.stdout, crlfDelay: Infinity });
+    for await (const rawLine of lines) {
+      const line = rawLine.replace(/^\x1e/, '').trim();
+      if (!line) continue;
+      const feature = JSON.parse(line) as SoundingFeature;
+      inputFeatureCount += 1;
+      if (feature.geometry?.type !== 'Point') continue;
+      const [longitude, latitude] = feature.geometry.coordinates;
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) continue;
+      if (
+        selection &&
+        (() => {
+          const selected = selection.at([longitude, latitude]);
+          return !selected || selected.name !== feature.properties?.SOURCE_CELL ||
+            (feature.properties?.SOURCE_EDITION !== undefined &&
+              String(selected.edition ?? '') !== String(feature.properties.SOURCE_EDITION)) ||
+            (feature.properties?.SOURCE_UPDATE !== undefined &&
+              selected.updateNumber !== Number(feature.properties.SOURCE_UPDATE));
+        })()
+      ) {
+        continue;
+      }
+      if (options.sampling === 'legacy-v1' && !legacyKeep(feature)) continue;
+
+      feature.properties = Object.fromEntries(
+        FIELDS.flatMap((field) =>
+          feature.properties?.[field] === undefined
+            ? []
+            : [[field, feature.properties[field]]],
+        ),
+      );
+
+      west = Math.min(west, longitude);
+      south = Math.min(south, latitude);
+      east = Math.max(east, longitude);
+      north = Math.max(north, latitude);
+      retainedFeatureCount += 1;
+      await writeWithBackpressure(filtered, `${JSON.stringify(feature)}\n`);
+    }
+    filtered.end();
+    await readerDone;
+    await filteredDone;
+  } catch (error) {
+    reader.kill('SIGTERM');
+    filtered.destroy();
+    await Promise.allSettled([readerDone, filteredDone]);
+    throw error;
+  }
+
+  if (
+    retainedFeatureCount === 0 ||
+    ![west, south, east, north].every(Number.isFinite)
+  ) {
+    throw new Error('No sounding features remain after chart coverage selection');
+  }
+  const writer = spawn('ogr2ogr', writerArguments, {
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  const writerError = captureStderr(writer);
+  await waitForProcess(writer, 'GDAL MVT writer', writerError);
+  return {
+    bounds: [west, south, east, north] as [number, number, number, number],
+    inputFeatureCount,
+    retainedFeatureCount,
+  };
+}
+
+async function build(options: Options) {
   const versionsDirectory = path.join(
     options.storageDirectory,
     DATASET,
@@ -189,54 +314,22 @@ async function build(options: Options) {
 
   await rm(temporaryDestination, { force: true, recursive: true });
   await mkdir(temporaryDestination, { recursive: true });
-  const checksum = createHash('sha256');
-  const encode = vtpbf.fromGeojsonVt as unknown as TileEncoder;
-  let tileCount = 0;
-  let totalBytes = 0;
-  const spoolPath = path.join(temporaryDestination, 'tiles.spool');
-  const spool = await open(spoolPath, 'wx');
-
+  const mbtiles = path.join(temporaryDestination, 'tiles.mbtiles');
+  const temporaryDatabase = path.join(
+    temporaryDestination,
+    'gdal-mvt.sqlite',
+  );
+  const filteredSequence = path.join(
+    temporaryDestination,
+    'filtered.geojsonseq',
+  );
   try {
-    const workingIndex = index as unknown as {
-      tiles: Record<number, { features: unknown[] }>;
-      tileCoords: unknown[];
-    };
-    // geojson-vt normally caches every generated tile. A depth-first traversal
-    // needs only the current branch and its siblings, not millions of tiles.
-    async function visit(zoom: number, x: number, y: number): Promise<void> {
-      const id = ((2 ** zoom * y + x) * 32) + zoom;
-      try {
-        const indexedTile = index.getTile(zoom, x, y);
-        workingIndex.tileCoords.length = 0; // debug bookkeeping only
-        if (!indexedTile || indexedTile.features.length === 0) return;
-        const tile = options.sampling === 'legacy-v1'
-          ? legacySampling(indexedTile, zoom)
-          : indexedTile;
-        const range = tileRange(bounds, zoom);
-        if (zoom >= MIN_ZOOM && tile.features.length > 0 &&
-            x >= range.minX && x <= range.maxX && y >= range.minY && y <= range.maxY) {
-          const buffer = Buffer.from(encode({ soundings: tile }));
-          const frame = Buffer.alloc(16);
-          [zoom, x, y, buffer.byteLength].forEach((value, offset) => frame.writeUInt32LE(value, offset * 4));
-          await spool.writeFile(Buffer.concat([frame, buffer]));
-          tileCount += 1;
-          totalBytes += buffer.byteLength;
-        }
-        // Further clipping uses tile.source, not the encoded features.
-        workingIndex.tiles[id]!.features = [];
-        if (zoom < MAX_ZOOM) {
-          for (let dx = 0; dx < 2; dx += 1) {
-            for (let dy = 0; dy < 2; dy += 1) {
-              await visit(zoom + 1, x * 2 + dx, y * 2 + dy);
-            }
-          }
-        }
-      } finally {
-        delete workingIndex.tiles[id];
-      }
-    }
-    await visit(0, 0, 0);
-
+    const streamed = await streamToMbtiles(
+      options,
+      mbtiles,
+      temporaryDatabase,
+      filteredSequence,
+    );
     const manifest: TilesetManifest & {
       artifactChecksum: string;
       sourceFeatureCount: number;
@@ -244,7 +337,7 @@ async function build(options: Options) {
       totalBytes: number;
     } = {
       artifactChecksum: '',
-      bounds,
+      bounds: streamed.bounds,
       createdAt: new Date().toISOString(),
       dataset: DATASET,
       format: 'mvt',
@@ -252,11 +345,11 @@ async function build(options: Options) {
       ...(options.coverage ? { selectionPolicy: CHART_SELECTION_POLICY } : {}),
       maxzoom: MAX_ZOOM,
       minzoom: MIN_ZOOM,
-      name: 'Miami SOUNDG',
-      sourceFeatureCount: source.features.length,
-      tileCount,
+      name: 'Marine SOUNDG',
+      sourceFeatureCount: streamed.retainedFeatureCount,
+      tileCount: 0,
       tilePathTemplate: `${DATASET}/versions/${options.version}/{z}/{x}/{y}.pbf`,
-      totalBytes,
+      totalBytes: 0,
       vectorLayers: [
         {
           fields: {
@@ -266,6 +359,8 @@ async function build(options: Options) {
             SORDAT: 'String',
             SORIND: 'String',
             SOURCE_CELL: 'String',
+            SOURCE_EDITION: 'String',
+            SOURCE_UPDATE: 'Number',
           },
           id: 'soundings',
           maxzoom: MAX_ZOOM,
@@ -274,12 +369,9 @@ async function build(options: Options) {
       ],
       version: options.version,
     };
-    await writeFile(
-      path.join(temporaryDestination, 'manifest.json'),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-      { encoding: 'utf8', flag: 'wx' },
-    );
-    await spool.close();
+    const manifestPath = path.join(temporaryDestination, 'manifest.json');
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
     const archive = path.join(temporaryDestination, 'tiles.pmtiles');
     const pmtilesPython = [
       process.env.PMTILES_PYTHON,
@@ -288,34 +380,45 @@ async function build(options: Options) {
       path.resolve(process.cwd(), '.venv/pmtiles/bin/python'),
       '/tmp/maris-pmtiles-venv/bin/python',
       'python3',
-    ].find((candidate) => candidate && (candidate === 'python3' || existsSync(candidate))) ?? 'python3';
-    await promisify(execFile)(pmtilesPython, [
-      fileURLToPath(new URL('./pack-pmtiles.py', import.meta.url)),
-      spoolPath, archive, path.join(temporaryDestination, 'manifest.json'),
-    ], { env: { ...process.env, TMPDIR: temporaryDestination }, maxBuffer: 2 * 1024 * 1024 });
+    ].find(
+      (candidate) =>
+        candidate && (candidate === 'python3' || existsSync(candidate)),
+    ) ?? 'python3';
+    const { stdout } = await promisify(execFile)(pmtilesPython, [
+      fileURLToPath(new URL('./pack-mbtiles.py', import.meta.url)),
+      mbtiles,
+      archive,
+      manifestPath,
+    ], {
+      env: { ...process.env, TMPDIR: temporaryDestination },
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    const packed = JSON.parse(stdout) as { tileCount: number };
+    manifest.tileCount = packed.tileCount;
+    const checksum = createHash('sha256');
     for await (const chunk of createReadStream(archive)) checksum.update(chunk);
     manifest.artifactChecksum = checksum.digest('hex');
     manifest.totalBytes = (await stat(archive)).size;
-    await writeFile(path.join(temporaryDestination, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-    await rm(spoolPath);
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await Promise.all([
+      rm(mbtiles, { force: true }),
+      rm(temporaryDatabase, { force: true }),
+      rm(filteredSequence, { force: true }),
+    ]);
     await mkdir(versionsDirectory, { recursive: true });
     await rename(temporaryDestination, destination);
 
-    const outputStats = await stat(destination);
     console.log(
       JSON.stringify({
         directory: destination,
-        directoryCreatedAt: outputStats.birthtime.toISOString(),
-        tileCount,
+        inputFeatureCount: streamed.inputFeatureCount,
+        retainedFeatureCount: streamed.retainedFeatureCount,
+        tileCount: manifest.tileCount,
         totalBytes: manifest.totalBytes,
-        uncompressedTileBytes: totalBytes,
-        inputFeatureCount,
-        retainedFeatureCount: source.features.length,
         version: options.version,
       }),
     );
   } catch (error) {
-    await spool.close().catch(() => undefined);
     await rm(temporaryDestination, { force: true, recursive: true });
     throw error;
   }

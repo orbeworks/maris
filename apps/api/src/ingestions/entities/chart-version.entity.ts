@@ -16,6 +16,7 @@ import type { IngestionStatus } from '../models/processing.js';
 import { ChartCell } from './chart-cell.entity.js';
 import { ChartDataset } from './chart-dataset.entity.js';
 import { ChartIngestion } from './chart-ingestion.entity.js';
+import { ChartShard } from './chart-shard.entity.js';
 
 @Entity({ name: 'chart_versions' })
 @Index('chart_versions_dataset_version_unique', ['datasetId', 'versionKey'], {
@@ -51,6 +52,9 @@ export class ChartVersion {
 
   @OneToMany(() => ChartCell, (cell) => cell.version)
   cells!: Relation<ChartCell[]>;
+
+  @OneToMany(() => ChartShard, (shard) => shard.version)
+  shards!: Relation<ChartShard[]>;
 
   @Column({ name: 'update_number', nullable: true, type: 'integer' })
   updateNumber!: number | null;

@@ -51,6 +51,11 @@ export type ProcessingResult = {
   manifestObjectKey?: string;
 };
 
+export type ProcessingShard = ProcessingResult & {
+  sequence: number;
+  shardKey: string;
+};
+
 export type ProcessingJob = {
   archivePath: string;
   ingestionId: string;

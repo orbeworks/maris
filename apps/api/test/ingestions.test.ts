@@ -19,12 +19,14 @@ import { ChartVersion } from '../src/ingestions/entities/chart-version.entity.js
 import { ChartCell } from '../src/ingestions/entities/chart-cell.entity.js';
 import { ChartCoverage } from '../src/ingestions/entities/chart-coverage.entity.js';
 import { ChartSurvey } from '../src/ingestions/entities/chart-survey.entity.js';
+import { ChartShard } from '../src/ingestions/entities/chart-shard.entity.js';
 import { ModelEncMetadata2026091800000 } from '../src/database/migrations/2026091800000-model-enc-metadata.js';
 import { CreateEncUploads2026091801000 } from '../src/database/migrations/2026091801000-create-enc-uploads.js';
 import { AddSourceObjectKey2026091802000 } from '../src/database/migrations/2026091802000-add-source-object-key.js';
 import { AddArtifactObjectKeys2026091803000 } from '../src/database/migrations/2026091803000-add-artifact-object-keys.js';
 import { AddSourceUrl2026091804000 } from '../src/database/migrations/2026091804000-add-source-url.js';
 import { AddEncObjectKey2026091805000 } from '../src/database/migrations/2026091805000-add-enc-object-key.js';
+import { IncrementalChartShards2026092002000 } from '../src/database/migrations/2026092002000-incremental-chart-shards.js';
 import type {
   ProcessingJob,
   ProcessingResult,
@@ -85,8 +87,8 @@ async function createDatabase(migrateMetadata = true): Promise<DataSource> {
     name: 'version',
   });
   const dataSource = (await memory.adapters.createTypeormDataSource({
-    entities: [ChartDataset, ChartIngestion, ChartVersion, ChartCell, ChartCoverage, ChartSurvey],
-    migrations: [CreateChartCatalog2026091700000, ...(migrateMetadata ? [ModelEncMetadata2026091800000] : []), CreateEncUploads2026091801000, AddSourceObjectKey2026091802000, AddArtifactObjectKeys2026091803000, AddSourceUrl2026091804000, AddEncObjectKey2026091805000],
+    entities: [ChartDataset, ChartIngestion, ChartVersion, ChartShard, ChartCell, ChartCoverage, ChartSurvey],
+    migrations: [CreateChartCatalog2026091700000, ...(migrateMetadata ? [ModelEncMetadata2026091800000] : []), CreateEncUploads2026091801000, AddSourceObjectKey2026091802000, AddArtifactObjectKeys2026091803000, AddSourceUrl2026091804000, AddEncObjectKey2026091805000, ...(migrateMetadata ? [IncrementalChartShards2026092002000] : [])],
     migrationsRun: true,
     synchronize: false,
     type: 'postgres',
@@ -226,10 +228,17 @@ test('metadata migration backfills both legacy and enriched cells without changi
   const catalog = new ChartCatalogService(database);
   const runner = database.createQueryRunner();
   try {
+    // The current entities include columns from the later incremental-shards
+    // migration; add only those columns while exercising this historical
+    // migration in isolation.
+    await database.query(
+      'ALTER TABLE chart_datasets ADD COLUMN revision bigint NOT NULL DEFAULT 0',
+    );
     const ingestion = await createIngestion(catalog);
     await database.query('UPDATE chart_versions SET edition_metadata = $1 WHERE id = $2',
       [JSON.stringify([...RESULT.cells, { name: 'LEGACY', edition: '1', updateNumber: 0, updatesApplied: [] }]), ingestion.versionId]);
     await new ModelEncMetadata2026091800000().up(runner);
+    await database.query('ALTER TABLE chart_cells ADD COLUMN shard_id uuid');
     const version = await database.getRepository(ChartVersion).findOneOrFail({
       where: { id: ingestion.versionId }, relations: { cells: { coverages: true, surveys: true } },
     });
@@ -428,4 +437,46 @@ test('TileJSON returns not found when no ENC version is published', async () => 
     tiles.getTileJson('https://api.example.test'),
     NotFoundException,
   );
+});
+
+test('incremental shards advance immutable catalog revisions without replacing earlier uploads', async () => {
+  const database = await createDatabase();
+  const catalog = new ChartCatalogService(database);
+  try {
+    const first = await createIngestion(catalog);
+    const firstRevision = await catalog.publishShard(first.id, {
+      ...RESULT,
+      artifactObjectKey: 'datasets/soundg/first/tiles.pmtiles',
+      manifestObjectKey: 'datasets/soundg/first/manifest.json',
+      sequence: 0,
+      shardKey: 'first-shard',
+    });
+    assert.equal(firstRevision, 1);
+
+    const second = await createIngestion(catalog);
+    const secondRevision = await catalog.publishShard(second.id, {
+      ...RESULT,
+      cells: RESULT.cells.map((cell) => ({ ...cell, name: 'BR5TEST' })),
+      artifactObjectKey: 'datasets/soundg/second/tiles.pmtiles',
+      manifestObjectKey: 'datasets/soundg/second/manifest.json',
+      sequence: 0,
+      shardKey: 'second-shard',
+    });
+    assert.equal(secondRevision, 2);
+
+    assert.deepEqual(
+      (await catalog.getPublishedCatalog('soundg', 1))?.shards.map((shard) => shard.shardKey),
+      ['first-shard'],
+    );
+    assert.deepEqual(
+      (await catalog.getPublishedCatalog('soundg'))?.shards.map((shard) => shard.shardKey),
+      ['first-shard', 'second-shard'],
+    );
+    assert.deepEqual(
+      (await catalog.getPublishedCells('soundg', 2)).map((cell) => cell.name).sort(),
+      ['BR5TEST', 'US5MIABC'],
+    );
+  } finally {
+    await database.destroy();
+  }
 });

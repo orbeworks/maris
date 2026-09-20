@@ -22,6 +22,9 @@ export class ChartDataset {
   @Column({ type: 'text' })
   name!: string;
 
+  @Column({ default: 0, type: 'bigint' })
+  revision!: string;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

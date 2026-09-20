@@ -102,9 +102,13 @@ sem BullMQ e sem fila no Redis. Apenas uma ingestão ENC roda por vez; um segund
 upload recebe `503` enquanto a primeira estiver em processamento. Jobs locais
 interrompidos são retomados a partir do estado persistido no PostgreSQL quando a
 API reinicia.
-O executor roda dentro da API com concorrência local 1. O PostgreSQL guarda o
-estado necessário para retomar uma ingestão interrompida quando a API local é
-iniciada novamente; Redis não participa do processamento ENC.
+O executor roda dentro da API com uma ingestão por vez. Dentro dela,
+`ENC_CELL_CONCURRENCY` (padrão `2`) limita a fila local de células: extração e
+leitura de metadados das próximas células acontecem enquanto um único escritor
+incorpora a anterior ao GeoPackage. O limite evita escritas SQLite concorrentes
+e aplica backpressure sem usar Redis. O PostgreSQL guarda o estado necessário
+para retomar uma ingestão interrompida quando a API local é iniciada novamente;
+Redis não participa do processamento ENC.
 Os estados persistidos são `received`, `validating`, `processing`, `ready`,
 `failed` e `published`. O trabalho pesado roda em processos GDAL/gerador
 separados do processo HTTP. Ingestões interrompidas são retomadas na próxima
@@ -114,29 +118,36 @@ Extrações e intermediários são apagados em `finally`; tiles incompletos tamb
 removidos pelo processo pai caso o gerador falhe. Antes de retomar o processamento,
 a API limpa temporários órfãos. ZIPs originais não são retidos; versões publicadas
 são preservadas no bucket.
-Executar o processamento diretamente não reduz o espaço temporário necessário
-para gerar os tiles de uma ingestão grande.
+`ENC_SHARD_CELL_COUNT` (padrão `100`) limita também o estado cartográfico: a API
+mantém somente um lote de células e suas coberturas em memória. Ao completar o
+lote, GDAL lê o GeoPackage como `GeoJSONSeq`, o filtro escolhe cada sondagem pela
+cobertura ENC e outro processo GDAL gera MVT com backpressure. O MBTiles é
+convertido sequencialmente para um PMTiles imutável, enviado ao bucket e apagado
+localmente antes do lote seguinte. Portanto, RAM e disco temporário são
+limitados pelo tamanho do lote, não pelo tamanho total do ZIP.
 
 ## Pipeline e tiles vetoriais
 
-O fluxo cartográfico é executado antes da publicação:
+O fluxo cartográfico publica cada lote assim que ele termina:
 
 ```text
 S-57 .000 + updates .001/.002
   -> GDAL/OGR (UPDATES=APPLY)
-  -> GeoJSON normalizado temporário
-  -> MVT/PBF pré-processados em um arquivo PMTiles
-  -> storage versionado
-  -> leitura por ranges na API (sem gerar tiles em runtime)
+  -> lote limitado de células em GeoPackage
+  -> GeoJSONSeq por streaming
+  -> MVT/PBF em um PMTiles imutável por lote
+  -> bucket + metadados/revisão no PostgreSQL
+  -> composição dos lotes por leitura de ranges na API
   -> TileJSON do NestJS
   -> MapLibre Native
 ```
 
-O GeoJSON é intermediário e temporário. Após o upload, o pipeline extrai o ZIP,
-aplica os updates com `UPDATES=APPLY`, normaliza `SOUNDG`, executa
-`build-soundg-tiles.ts` em processo separado e empacota os PBFs antes de marcar a
-versão como `ready`. Se a pasta da versão já existir, a geração falha em vez de
-sobrescrever artefatos publicados.
+Não existe `FeatureCollection` intermediário. Cada lote publicado incrementa a
+revisão global (`catalog-1`, `catalog-2`, ...), tornando a cobertura disponível
+no app sem esperar o ZIP inteiro. Revisões antigas continuam imutáveis. Novas
+ingestões acrescentam shards às anteriores; EUA, Brasil e outras regiões
+coexistem. Quando shards se sobrepõem, a API compõe o tile e mantém somente a
+célula de edição/update mais recente e de maior detalhe naquele ponto.
 
 O storage de cartas, local ou no Railway Bucket, tem esta estrutura lógica:
 
@@ -144,31 +155,34 @@ O storage de cartas, local ou no Railway Bucket, tem esta estrutura lógica:
 .storage/chart-data/
   soundg/
     versions/
-      miami-soundg-v1/
+      soundg-{ingestion-uuid}-00000/
         manifest.json
-        {z}/{x}/{y}.pbf
-      nova-versao/
+        tiles.pmtiles
+      soundg-{ingestion-uuid}-00001/
         manifest.json
         tiles.pmtiles
 ```
 
-O PostgreSQL é a fonte de verdade para a versão ativa. A publicação aceita
-somente versões `ready` e, na mesma transação, desativa a versão anterior, ativa
-a nova e registra os timestamps. Os arquivos anteriores ficam intactos para
-rollback e clientes offline. No modo S3, o Nginx encaminha os tiles à API, que
-lê somente os ranges necessários do PMTiles no bucket privado. O cache
+O PostgreSQL é a fonte de verdade para os shards e revisões publicados. Publicar
+um shard incrementa a revisão em uma transação, sem desativar regiões de
+ingestões anteriores. Os arquivos anteriores ficam intactos para clientes
+offline e para resolver URLs de revisões antigas. No modo S3, o Nginx encaminha
+os tiles à API, que lê somente os ranges necessários dos PMTiles no bucket privado. O cache
 compartilhado de índices e manifests é limitado a 64 entradas. Não há cache do
 arquivo completo nem reconstrução de GeoJSON em runtime.
 
-O NestJS consulta a versão `published` e `active` no banco e lê somente seu
-pequeno `manifest.json` para responder:
+O NestJS consulta a revisão mais recente e os bounds dos shards para responder:
 
 ```text
 GET /tiles/soundg.json
 ```
 
-O TileJSON aponta para a versão ativa usando a URL compatível
-`/tiles/soundg/{version}/{z}/{x}/{y}.pbf`, com cache imutável de um ano.
+O TileJSON aponta para a URL estável `/tiles/soundg/{z}/{x}/{y}.pbf`. O app
+envia somente as coordenadas do tile; a API resolve a revisão mais recente,
+seleciona os shards e compõe a resposta. O campo `version` do TileJSON continua
+indicando `catalog-{revision}` para que fontes e áreas offline detectem uma
+atualização. URLs explícitas `/tiles/soundg/catalog-{revision}/{z}/{x}/{y}.pbf`
+continuam disponíveis como snapshots imutáveis para downloads em andamento.
 Tiles ausentes retornam 204; versões inexistentes continuam retornando erro
 não cacheável. `CHART_ASSET_BASE_URL` vale apenas para versões legadas em PBFs
 soltos; PMTiles usa a API atual. A interface `ChartStorage` isola o acesso local
@@ -180,8 +194,8 @@ zoom e conteúdo MVT são preservados. A pasta é publicada por rename somente
 após finalizar o arquivo e seu checksum SHA-256. Temporários são removidos
 no término/falha e recuperados após reinício.
 O índice de geração é percorrido em profundidade: cada ramo é liberado depois
-da escrita, evitando acumular todos os tiles em RAM. O GeoJSON normalizado
-ainda é carregado no processo de ingestão separado, nunca no serving.
+da escrita, evitando acumular todos os tiles em RAM. O serving decodifica e
+compõe apenas os PBFs dos shards que intersectam o tile solicitado.
 
 Validação no Railway em 18/09/2026, com `FL_ENCs.zip`: 700 células,
 320.363 sondagens e 323.060 tiles em um PMTiles de 92.403.866 bytes
@@ -196,9 +210,9 @@ baixa o arquivo PMTiles inteiro.
 
 ### Carta no centro do mapa
 
-`GET /charts/at-point?lat=25.7&lon=-80.15&version=soundg-{uuid}` retorna
+`GET /charts/at-point?lat=25.7&lon=-80.15&version=catalog-{revision}` retorna
 uma única carta e seus metadados. Sem `version`, consulta a versão publicada
-ativa; o app sempre envia a mesma versão imutável usada no `VectorSource`.
+mais recente; o app sempre envia a mesma revisão imutável usada no `VectorSource`.
 O centro é consultado no MapLibre ao abrir/mover o painel Chart information,
 com debounce de 200 ms e cancelamento de respostas obsoletas.
 

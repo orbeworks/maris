@@ -9,10 +9,10 @@ export function useOnlineChart(apiUrl: string, enabled: boolean) {
   const [chart, setChart] = useState<ChartSnapshot | null>(null);
   useEffect(() => {
     if (!enabled) return;
-    let disposed = false, running = false, loaded = false;
+    let disposed = false, running = false;
     let controller: AbortController | undefined;
     const load = async () => {
-      if (disposed || running || loaded || AppState.currentState !== "active") return;
+      if (disposed || running || AppState.currentState !== "active") return;
       running = true;
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 8000);
@@ -21,7 +21,9 @@ export function useOnlineChart(apiUrl: string, enabled: boolean) {
         if (!response.ok) throw new Error("Chart catalog unavailable");
         const result = await response.json() as ChartSnapshot;
         if (!result.version || !result.tiles?.length || !result.tiles.every((url) => url.includes(`/${result.version}/`))) throw new Error("Invalid chart catalog");
-        if (!disposed) { loaded = true; setChart(result); }
+        if (!disposed) setChart((current) =>
+          current?.version === result.version ? current : result
+        );
       } catch { /* retry while there is no usable catalog */ }
       finally { running = false; clearTimeout(timeout); }
     };

@@ -3,6 +3,7 @@ import type { Relation } from 'typeorm';
 import { ChartVersion } from './chart-version.entity.js';
 import { ChartCoverage } from './chart-coverage.entity.js';
 import { ChartSurvey } from './chart-survey.entity.js';
+import { ChartShard } from './chart-shard.entity.js';
 
 @Entity({ name: 'chart_cells' })
 @Index('chart_cells_version_name_unique', ['versionId', 'name'], { unique: true })
@@ -16,6 +17,13 @@ export class ChartCell {
   @ManyToOne(() => ChartVersion, (version) => version.cells, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'version_id' })
   version!: Relation<ChartVersion>;
+
+  @Column({ name: 'shard_id', type: 'uuid', nullable: true })
+  shardId!: string | null;
+
+  @ManyToOne(() => ChartShard, (shard) => shard.cells, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'shard_id' })
+  shard!: Relation<ChartShard> | null;
 
   @Column({ type: 'text' })
   name!: string;
@@ -62,4 +70,3 @@ export class ChartCell {
   @OneToMany(() => ChartSurvey, (survey) => survey.cell, { cascade: ['insert'] })
   surveys!: Relation<ChartSurvey[]>;
 }
-

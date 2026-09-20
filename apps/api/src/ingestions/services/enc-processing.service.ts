@@ -17,6 +17,7 @@ import type {
   ProcessedCell,
   ProcessingJob,
   ProcessingResult,
+  ProcessingShard,
 } from '../models/processing.js';
 
 const execFileAsync = promisify(execFile);
@@ -27,6 +28,8 @@ type GeneratedManifest = {
 
 @Injectable()
 export class EncProcessingService {
+  private readonly cellConcurrency: number;
+  private readonly shardCellCount: number;
   private readonly chartStorageDirectory: string;
   private readonly storageDirectory: string;
 
@@ -39,6 +42,18 @@ export class EncProcessingService {
     @Inject(ObjectStorageService)
     private readonly objectStorage: ObjectStorageService = undefined as never,
   ) {
+    const configuredConcurrency = Number(
+      config.get<number>('ENC_CELL_CONCURRENCY', 2),
+    );
+    this.cellConcurrency = Number.isInteger(configuredConcurrency)
+      ? Math.max(1, Math.min(8, configuredConcurrency))
+      : 2;
+    const configuredShardSize = Number(
+      config.get<number>('ENC_SHARD_CELL_COUNT', 100),
+    );
+    this.shardCellCount = Number.isInteger(configuredShardSize)
+      ? Math.max(10, Math.min(500, configuredShardSize))
+      : 100;
     this.storageDirectory = path.resolve(
       config.getOrThrow<string>('STORAGE_DIR'),
     );
@@ -47,17 +62,17 @@ export class EncProcessingService {
     );
   }
 
-  async process(job: ProcessingJob): Promise<ProcessingResult> {
-    let removeLocalArtifacts = false;
+  async process(
+    job: ProcessingJob,
+    onShard?: (shard: ProcessingShard) => Promise<void>,
+  ): Promise<ProcessingResult> {
     const archivePath = path.join(this.storageDirectory, job.archivePath);
     const workDirectory = path.join(
       this.storageDirectory,
       '.processing',
       job.ingestionId,
     );
-    const extractedDirectory = path.join(workDirectory, 'cell');
-    const geopackage = path.join(workDirectory, 'soundings.gpkg');
-    const normalizedGeoJson = path.join(workDirectory, 'soundings.json');
+    const extractedDirectory = path.join(workDirectory, 'cells');
 
     await rm(workDirectory, { force: true, recursive: true });
     await mkdir(extractedDirectory, { recursive: true });
@@ -66,145 +81,181 @@ export class EncProcessingService {
       const archive = await this.archiveService.inspect(archivePath);
       if (archive.cells.length === 0) throw new Error('No S-57 base cells extracted');
 
-      const cells: ProcessedCell[] = [];
-      let soundingCellCount = 0;
+      const collectedCells: ProcessedCell[] = [];
+      let batchCells: ProcessedCell[] = [];
+      let sequence = 0;
+      let aggregateBounds: [number, number, number, number] | undefined;
+      let lastResult: ProcessingShard | undefined;
+      let geopackage = path.join(workDirectory, `soundings-${sequence}.gpkg`);
       let geopackageCreated = false;
-      for (const entry of archive.cells.sort((a,b) => a.name.localeCompare(b.name))) {
-        await rm(extractedDirectory, { force: true, recursive: true });
-        await mkdir(extractedDirectory, { recursive: true });
-        const files = await this.archiveService.extractCell(archivePath, entry.name, extractedDirectory);
-        const cell = files.find(file => /\.000$/i.test(file));
-        if (!cell) throw new Error(`Missing extracted base cell ${entry.name}`);
-        const cellName = entry.name;
-        const updatesApplied = entry.updateNumbers;
-        const { hasSoundings, ...metadata } = await this.readCellMetadata(cell);
-        if (hasSoundings) {
-          const arguments_ = [
-            ...(geopackageCreated ? ['-update', '-append'] : []),
-            ...(!geopackageCreated ? ['-f', 'GPKG'] : []),
-            ...(geopackageCreated ? [geopackage] : [geopackage]),
-            cell,
-            '-oo', 'SPLIT_MULTIPOINT=ON',
-            '-oo', 'ADD_SOUNDG_DEPTH=ON',
-            '-oo', 'UPDATES=APPLY',
-            '-dialect', 'SQLite',
-            '-sql', `SELECT *, '${entry.name}' AS SOURCE_CELL FROM SOUNDG`,
-            '-nln', 'soundings',
-            '-dim', 'XY',
-          ];
-          await this.run('ogr2ogr', arguments_);
-          geopackageCreated = true;
-          soundingCellCount += 1;
+      const entries = archive.cells.sort((a, b) => a.name.localeCompare(b.name));
+      type PreparedCell = {
+        cell: string;
+        directory: string;
+        entry: (typeof entries)[number];
+        metadata: Awaited<ReturnType<EncProcessingService['readCellMetadata']>>;
+      };
+      const pending = new Map<number, Promise<PreparedCell>>();
+      let nextToStart = 0;
+      const publishBatch = async () => {
+        if (batchCells.length === 0) return;
+        if (!geopackageCreated) {
+          throw new Error('No SOUNDG layer found in this ENC batch; no sounding shard can be published');
         }
-        cells.push({
-          ...metadata,
-          edition: metadata.edition,
-          name: cellName,
-          updateNumber: Math.max(metadata.updateNumber, ...updatesApplied, 0),
-          updatesApplied,
-        });
-        // Never retain an extracted cell between batches. The temporary local
-        // source ZIP is reopened lazily for the next cell and removed afterward.
-        await rm(extractedDirectory, { force: true, recursive: true });
-      }
+        const shardKey = `${job.versionKey}-${String(sequence).padStart(5, '0')}`;
+        const storagePath = path.posix.join('soundg', 'versions', shardKey);
+        const manifestPath = path.posix.join(storagePath, 'manifest.json');
+        const localRoot = path.join(this.chartStorageDirectory, storagePath);
+        const coveragePath = path.join(workDirectory, `coverage-${sequence}.json`);
+        await writeFile(coveragePath, JSON.stringify(coverageCells(batchCells)));
 
-      const storagePath = path.posix.join(
-        'soundg',
-        'versions',
-        job.versionKey,
-      );
-      const manifestPath = path.posix.join(storagePath, 'manifest.json');
-      const localRoot = path.join(this.chartStorageDirectory, storagePath);
-      const remotePrefix = `datasets/soundg/${job.versionKey}`;
-      if (this.objectStorage?.enabled) {
-        const [remoteManifest, remoteArtifact] = await Promise.all([
-          this.objectStorage.tryHead(`${remotePrefix}/manifest.json`),
-          this.objectStorage.tryHead(`${remotePrefix}/tiles.pmtiles`),
+        const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../');
+        await this.run(process.execPath, [
+          path.join(apiRoot, 'node_modules/tsx/dist/cli.mjs'),
+          path.join(apiRoot, 'scripts/build-soundg-tiles.ts'),
+          '--input', geopackage,
+          '--layer', 'soundings',
+          '--storage-dir', this.chartStorageDirectory,
+          '--version', shardKey,
+          '--coverage', coveragePath,
         ]);
-        if (remoteManifest && remoteArtifact) {
-          const manifest = JSON.parse(await this.objectStorage.getText(`${remotePrefix}/manifest.json`)) as GeneratedManifest;
-          return {
-            bounds: manifest.bounds,
-            cells,
-            manifestPath,
-            storagePath,
-            artifactObjectKey: `${remotePrefix}/tiles.pmtiles`,
-            manifestObjectKey: `${remotePrefix}/manifest.json`,
-          };
-        }
-      }
-      const existingManifest = await this.readManifestIfPresent(manifestPath);
-      if (existingManifest) {
+        const manifest = JSON.parse(
+          await readFile(path.join(this.chartStorageDirectory, manifestPath), 'utf8'),
+        ) as GeneratedManifest;
         const remote = this.objectStorage?.enabled
-          ? await this.publishArtifacts(job.versionKey, localRoot)
+          ? await this.publishArtifacts(shardKey, localRoot)
           : undefined;
-        removeLocalArtifacts = Boolean(remote);
-        return {
-          bounds: existingManifest.bounds,
-          cells,
+        const shard: ProcessingShard = {
+          bounds: manifest.bounds,
+          cells: batchCells,
           manifestPath,
           storagePath,
+          sequence,
+          shardKey,
           ...(remote ?? {}),
         };
+        await onShard?.(shard);
+        if (!onShard) collectedCells.push(...batchCells);
+        aggregateBounds = aggregateBounds
+          ? [
+              Math.min(aggregateBounds[0], shard.bounds[0]),
+              Math.min(aggregateBounds[1], shard.bounds[1]),
+              Math.max(aggregateBounds[2], shard.bounds[2]),
+              Math.max(aggregateBounds[3], shard.bounds[3]),
+            ]
+          : shard.bounds;
+        // The callback has already persisted the batch. Do not retain its
+        // potentially large survey/coverage metadata while preparing the next
+        // shard; only the non-incremental compatibility path needs it.
+        lastResult = onShard ? { ...shard, cells: [] } : shard;
+        if (remote) await rm(localRoot, { force: true, recursive: true, maxRetries: 3 });
+        await Promise.all([
+          rm(geopackage, { force: true }),
+          rm(coveragePath, { force: true }),
+        ]);
+        sequence += 1;
+        batchCells = [];
+        geopackage = path.join(workDirectory, `soundings-${sequence}.gpkg`);
+        geopackageCreated = false;
+      };
+      const prepare = async (index: number): Promise<PreparedCell> => {
+        const entry = entries[index]!;
+        const directory = path.join(
+          extractedDirectory,
+          `${String(index).padStart(5, '0')}-${entry.name}`,
+        );
+        await mkdir(directory, { recursive: true });
+        const files = await this.archiveService.extractCell(
+          archivePath,
+          entry.name,
+          directory,
+        );
+        const cell = files.find((file) => /\.000$/i.test(file));
+        if (!cell) throw new Error(`Missing extracted base cell ${entry.name}`);
+        return {
+          cell,
+          directory,
+          entry,
+          metadata: await this.readCellMetadata(cell),
+        };
+      };
+      const fillPipeline = () => {
+        while (
+          nextToStart < entries.length &&
+          pending.size < this.cellConcurrency
+        ) {
+          const index = nextToStart++;
+          const task = prepare(index);
+          // Attach an immediate observer so a later cell cannot become an
+          // unhandled rejection while the ordered consumer awaits earlier work.
+          void task.catch(() => undefined);
+          pending.set(index, task);
+        }
+      };
+      fillPipeline();
+      try {
+        for (let index = 0; index < entries.length; index += 1) {
+          const prepared = await pending.get(index)!;
+          pending.delete(index);
+          fillPipeline();
+          const { cell, directory, entry, metadata: result } = prepared;
+          const { hasSoundings, ...metadata } = result;
+          const processedCell: ProcessedCell = {
+            ...metadata,
+            edition: metadata.edition,
+            name: entry.name,
+            updateNumber: Math.max(
+              metadata.updateNumber,
+              ...entry.updateNumbers,
+              0,
+            ),
+            updatesApplied: entry.updateNumbers,
+          };
+          if (hasSoundings) {
+            const arguments_ = [
+              ...(geopackageCreated ? ['-update', '-append'] : []),
+              ...(!geopackageCreated ? ['-f', 'GPKG'] : []),
+              geopackage,
+              cell,
+              '-oo', 'SPLIT_MULTIPOINT=ON',
+              '-oo', 'ADD_SOUNDG_DEPTH=ON',
+              '-oo', 'UPDATES=APPLY',
+              '-sql', `SELECT *, '${entry.name}' AS SOURCE_CELL, '${processedCell.edition ?? ''}' AS SOURCE_EDITION, ${processedCell.updateNumber} AS SOURCE_UPDATE FROM SOUNDG`,
+              '-nln', 'soundings',
+              '-dim', 'XY',
+            ];
+            await this.run('ogr2ogr', arguments_);
+            geopackageCreated = true;
+          }
+          batchCells.push(processedCell);
+          await rm(directory, { force: true, recursive: true });
+          // Keep at least one full tail batch. Besides avoiding tiny shards,
+          // this lets metadata-only cells at the end travel with the last
+          // SOUNDG-producing cells instead of creating an empty PMTiles file.
+          const remaining = entries.length - index - 1;
+          if (
+            batchCells.length >= this.shardCellCount &&
+            remaining >= this.shardCellCount
+          ) await publishBatch();
+        }
+        await publishBatch();
+      } catch (error) {
+        await Promise.allSettled(pending.values());
+        throw error;
       }
 
-      if (soundingCellCount === 0) {
+      if (!lastResult || !aggregateBounds) {
         throw new Error('No SOUNDG layer found in any ENC cell; no sounding tiles can be published');
       }
-
-      await this.run('ogr2ogr', [
-        '-f',
-        'GeoJSON',
-        normalizedGeoJson,
-        geopackage,
-        'soundings',
-        '-dim',
-        'XY',
-        '-select',
-        'DEPTH,RCID,LNAM,SORDAT,SORIND,SOURCE_CELL',
-        '-lco',
-        'RFC7946=YES',
-        '-lco',
-        'COORDINATE_PRECISION=6',
-      ]);
-
-      const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../');
-      const scriptPath = path.join(apiRoot, 'scripts/build-soundg-tiles.ts');
-      const tsxPath = path.join(apiRoot, 'node_modules/tsx/dist/cli.mjs');
-      const coveragePath = path.join(workDirectory, 'coverage.json');
-      await writeFile(coveragePath, JSON.stringify(coverageCells(cells)));
-      await this.run(process.execPath, [
-        tsxPath,
-        scriptPath,
-        '--input',
-        normalizedGeoJson,
-        '--storage-dir',
-        this.chartStorageDirectory,
-        '--version',
-        job.versionKey,
-        '--coverage',
-        coveragePath,
-      ]);
-
-      const manifest = JSON.parse(
-        await readFile(
-          path.join(this.chartStorageDirectory, manifestPath),
-          'utf8',
-        ),
-      ) as GeneratedManifest;
-
-      const remote = this.objectStorage?.enabled
-        ? await this.publishArtifacts(job.versionKey, localRoot)
-        : undefined;
-      removeLocalArtifacts = Boolean(remote);
-      return { bounds: manifest.bounds, cells, manifestPath, storagePath, ...(remote ?? {}) };
+      return {
+        ...lastResult,
+        bounds: aggregateBounds,
+        cells: onShard ? [] : collectedCells,
+      };
     } finally {
       await Promise.all([
         rm(workDirectory, { force: true, recursive: true, maxRetries: 3 }),
         this.cleanup.cleanVersion(job.versionKey),
-        ...(removeLocalArtifacts
-          ? [rm(path.join(this.chartStorageDirectory, 'soundg', 'versions', job.versionKey), { force: true, recursive: true, maxRetries: 3 })]
-          : []),
       ]);
     }
   }

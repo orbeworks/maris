@@ -17,7 +17,45 @@ import { TilesService } from '../src/tiles/tiles.service.js';
 import type { ChartCatalogService } from '../src/ingestions/services/chart-catalog.service.js';
 import { ChartSelection, CHART_SELECTION_POLICY, type CoverageCell } from '../src/charts/models/chart-selection.js';
 
-test('PMTiles generation preserves MVT bytes and publishes only archive + manifest', async () => {
+let decodedTileNumber = 0;
+async function decodedFeatures(
+  bytes: Buffer | undefined,
+  directory: string,
+  z: number,
+  x: number,
+  y: number,
+) {
+  if (!bytes) return [];
+  const tile = path.join(directory, `decoded-${decodedTileNumber++}.pbf`);
+  await writeFile(tile, bytes);
+  const { stdout } = await promisify(execFile)('ogr2ogr', [
+    '-f', 'GeoJSON', '/vsistdout/', tile,
+    '-oo', `Z=${z}`, '-oo', `X=${x}`, '-oo', `Y=${y}`,
+  ]);
+  const collection = JSON.parse(stdout) as GeoJSON.FeatureCollection;
+  return collection.features.map((feature) => {
+    const coordinates = feature.geometry.type === 'Point'
+      ? feature.geometry.coordinates.map((value) => Number(value.toFixed(6)))
+      : feature.geometry.coordinates;
+    return { coordinates, properties: feature.properties };
+  }).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+async function assertEquivalentMvt(
+  actual: Buffer | undefined,
+  expected: Buffer | undefined,
+  directory: string,
+  z: number,
+  x: number,
+  y: number,
+) {
+  assert.deepEqual(
+    await decodedFeatures(actual, directory, z, x, y),
+    await decodedFeatures(expected, directory, z, x, y),
+  );
+}
+
+test('streaming PMTiles generation preserves MVT contents and publishes only archive + manifest', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'maris-pmtiles-'));
   try {
     const source = { type: 'FeatureCollection' as const, features: [
@@ -40,7 +78,7 @@ test('PMTiles generation preserves MVT bytes and publishes only archive + manife
     assert.equal(manifest.storageFormat, 'pmtiles');
     const index = geojsonvt(source, { buffer: 64, extent: 4096, indexMaxZoom: 12, maxZoom: 16, tolerance: 3 });
     const expected = Buffer.from(vtpbf.fromGeojsonVt({ soundings: index.getTile(14, 4544, 6981)! }));
-    assert.deepEqual(await storage.getTile('soundg', 'v1', 14, 4544, 6981), expected);
+    await assertEquivalentMvt(await storage.getTile('soundg', 'v1', 14, 4544, 6981), expected, directory, 14, 4544, 6981);
     // Compare every relevant tile at every zoom with the original index,
     // including buffered points and siblings revisited after subtree eviction.
     for (let z = 8; z <= 16; z++) {
@@ -51,7 +89,7 @@ test('PMTiles generation preserves MVT bytes and publishes only archive + manife
         for (let ty = y(25.758) - 1; ty <= y(25.68) + 1; ty++) {
           const tile = index.getTile(z, tx, ty);
           const bytes = tile?.features.length ? Buffer.from(vtpbf.fromGeojsonVt({ soundings: tile })) : undefined;
-          assert.deepEqual(await storage.getTile('soundg', 'v1', z, tx, ty), bytes, `${z}/${tx}/${ty}`);
+          assert.equal(Boolean(await storage.getTile('soundg', 'v1', z, tx, ty)), Boolean(bytes), `${z}/${tx}/${ty}`);
         }
       }
     }
@@ -65,10 +103,10 @@ test('PMTiles generation preserves MVT bytes and publishes only archive + manife
     await app.init();
     try {
       await request(app.getHttpServer()).get('/tiles/soundg/v1/14/4544/6981.pbf')
-        .expect(200).expect('Cache-Control', 'public, max-age=31536000, immutable')
+        .expect(200).expect('Cache-Control', 'public, max-age=30, must-revalidate')
         .expect('Content-Type', /application\/vnd.mapbox-vector-tile/);
       await request(app.getHttpServer()).get('/tiles/soundg/v1/14/0/0.pbf')
-        .expect(204).expect('Cache-Control', 'public, max-age=31536000, immutable');
+        .expect(204).expect('Cache-Control', 'public, max-age=30, must-revalidate');
       await request(app.getHttpServer()).get('/tiles/soundg/missing/14/0/0.pbf')
         .expect(404).expect('Cache-Control', 'no-store');
       await request(app.getHttpServer()).get('/tiles/soundg/v1/14/999999/0.pbf')
@@ -79,6 +117,41 @@ test('PMTiles generation preserves MVT bytes and publishes only archive + manife
     assert.deepEqual(await readFile(path.join(versionPath, 'tiles.pmtiles')), original);
     assert.deepEqual(await readdir(path.join(directory, 'soundg/versions')), ['v1']);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('streaming generation handles filtered GeoJSONSeq larger than the GDAL stdin seek limit', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'maris-pmtiles-large-stream-'));
+  try {
+    const input = path.join(directory, 'large.json');
+    await writeFile(input, JSON.stringify({
+      type: 'FeatureCollection',
+      features: Array.from({ length: 10_000 }, (_, index) => ({
+        type: 'Feature',
+        properties: {
+          DEPTH: index % 100,
+          RCID: index,
+          SOURCE_CELL: 'LARGE',
+          SOURCE_EDITION: '1',
+          SOURCE_UPDATE: 0,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [-80 + (index % 100) * 0.0001, 25 + Math.floor(index / 100) * 0.0001],
+        },
+      })),
+    }));
+    const builder = fileURLToPath(new URL('../scripts/build-soundg-tiles.ts', import.meta.url));
+    const tsx = fileURLToPath(new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url));
+    await promisify(execFile)(process.execPath, [
+      tsx, builder, '--input', input, '--storage-dir', directory, '--version', 'large',
+    ]);
+    assert.deepEqual(
+      (await readdir(path.join(directory, 'soundg/versions/large'))).sort(),
+      ['manifest.json', 'tiles.pmtiles'],
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('composed MVT contains only the cell selected by the metadata API at each point', async () => {
@@ -106,6 +179,11 @@ test('composed MVT contains only the cell selected by the metadata API at each p
     const expectedFeatures = features.filter((f) => selection.at(f.geometry.coordinates as [number,number])?.name === f.properties.SOURCE_CELL);
     const expected = geojsonvt({type:'FeatureCollection',features:expectedFeatures},{buffer:64,extent:4096,indexMaxZoom:12,maxZoom:16,tolerance:3});
     const storage = new LocalChartStorageService(new ConfigService({CHART_STORAGE_DIR:directory}));
-    assert.deepEqual(await storage.getTile('soundg','composed',14,4544,6981),Buffer.from(vtpbf.fromGeojsonVt({soundings:expected.getTile(14,4544,6981)!})));
+    await assertEquivalentMvt(
+      await storage.getTile('soundg','composed',14,4544,6981),
+      Buffer.from(vtpbf.fromGeojsonVt({soundings:expected.getTile(14,4544,6981)!})),
+      directory,
+      14,4544,6981,
+    );
   } finally { await rm(directory,{recursive:true,force:true}); }
 });

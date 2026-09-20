@@ -95,7 +95,7 @@ async function checkArchive(names: string[], failConversion: boolean) {
     protected override async run(command: string, args: string[]) {
       commands.push([command, ...args]);
       if (command === process.execPath) {
-        const target = path.join(directory, 'soundg/versions/test');
+        const target = path.join(directory, 'soundg/versions/test-00000');
         await mkdir(target, { recursive: true });
         await writeFile(path.join(target, 'manifest.json'), JSON.stringify({ bounds: [-80, 25, -79, 26] }));
       } else if (failConversion) {
@@ -120,6 +120,7 @@ async function checkArchive(names: string[], failConversion: boolean) {
       assert.ok(conversions[0]!.includes('GPKG'));
       assert.ok(!conversions[0]!.includes('-append'));
       assert.ok(conversions[1]!.includes('-append'));
+      assert.ok(conversions.every((args) => !args.includes('-dialect')));
       assert.ok(conversions.every((args) => !args.some((arg) => arg.endsWith('EMPTY.000'))));
     }
     assert.equal(existsSync(path.join(directory, '.processing/test')), false);

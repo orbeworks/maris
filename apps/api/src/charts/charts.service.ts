@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { ChartCell } from '../ingestions/entities/chart-cell.entity.js';
 import { ChartSurvey } from '../ingestions/entities/chart-survey.entity.js';
 import { ChartVersion } from '../ingestions/entities/chart-version.entity.js';
+import { ChartCatalogService } from '../ingestions/services/chart-catalog.service.js';
 import { CHART_STORAGE, type ChartStorage } from '../tiles/storage/chart-storage.js';
 import { ChartQueryDto } from './dtos/chart-query.dto.js';
 import type { ChartInformationDto } from './dtos/chart-information.dto.js';
@@ -13,9 +14,40 @@ export class ChartsService {
   constructor(
     @Inject(DataSource) private readonly database: DataSource,
     @Inject(CHART_STORAGE) private readonly storage: ChartStorage,
+    @Inject(ChartCatalogService)
+    private readonly catalog: ChartCatalogService = undefined as never,
   ) {}
 
   async atPoint(query: ChartQueryDto): Promise<ChartInformationDto> {
+    const catalogRevision = query.version
+      ? /^catalog-(\d+)$/.exec(query.version)?.[1]
+      : undefined;
+    const incremental = this.catalog?.getPublishedCatalog
+      ? await this.catalog.getPublishedCatalog(
+          'soundg',
+          catalogRevision === undefined ? undefined : Number(catalogRevision),
+        )
+      : null;
+    if (incremental && (!query.version || catalogRevision !== undefined)) {
+      const cells = await this.catalog.getPublishedCells(
+        'soundg', incremental.revision,
+      );
+      const coordinate: [number, number] = [query.lon, query.lat];
+      const selected = new ChartSelection(cells).at(coordinate);
+      const cell = selected && cells.find((candidate) =>
+        candidate.name === selected.name &&
+        candidate.edition === selected.edition &&
+        candidate.updateNumber === selected.updateNumber,
+      );
+      if (!cell) throw new NotFoundException('No ENC coverage at this coordinate');
+      return this.information(
+        cell,
+        coordinate,
+        `catalog-${incremental.revision}`,
+        cell.shard?.publishedAt ?? null,
+        cell.shard?.publishedAt ?? null,
+      );
+    }
     const version = await this.database.getRepository(ChartVersion).findOne({
       where: {
         status: 'published', dataset: { key: 'soundg' },
@@ -35,6 +67,22 @@ export class ChartsService {
     const selected = new ChartSelection(cells).at(coordinate);
     const cell = selected && cells.find((c) => c.name === selected.name && c.edition === selected.edition && c.updateNumber === selected.updateNumber);
     if (!cell) throw new NotFoundException('No ENC coverage at this coordinate');
+    return this.information(
+      cell,
+      coordinate,
+      version.versionKey,
+      version.processedAt,
+      version.publishedAt,
+    );
+  }
+
+  private async information(
+    cell: ChartCell,
+    coordinate: [number, number],
+    version: string,
+    processedAt: Date | null,
+    publishedAt: Date | null,
+  ): Promise<ChartInformationDto> {
     const surveys = (await this.database.getRepository(ChartSurvey).find({
       where: { cellId: cell.id }, order: { objectClass: 'ASC', id: 'ASC' },
     })).filter((survey) => survey.geometry === null || coversPoint(survey.geometry, coordinate));
@@ -46,8 +94,8 @@ export class ChartsService {
       horizontalDatum: cell.horizontalDatum, soundingDatum: cell.soundingDatum, verticalDatum: cell.verticalDatum,
       dataQuality: [...new Set(surveys.flatMap((s) => s.dataQuality === null ? [] : [s.dataQuality]))].sort(),
       surveys: surveys.map((s) => ({ objectClass: s.objectClass, source: s.surveySource, date: s.surveyDate, startedAt: s.surveyStartedAt, endedAt: s.surveyEndedAt })),
-      version: version.versionKey, processedAt: version.processedAt?.toISOString() ?? null,
-      publishedAt: version.publishedAt?.toISOString() ?? null, coordinate,
+      version, processedAt: processedAt?.toISOString() ?? null,
+      publishedAt: publishedAt?.toISOString() ?? null, coordinate,
     };
   }
 }

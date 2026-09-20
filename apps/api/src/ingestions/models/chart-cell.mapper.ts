@@ -12,10 +12,10 @@ export function encDate(value: unknown): string | null {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : null;
 }
 
-export function mapChartCell(versionId: string, input: ProcessedCell): ChartCell {
+export function mapChartCell(versionId: string, input: ProcessedCell, shardId: string | null = null): ChartCell {
   const metadata = input.metadata;
   const cell = Object.assign(new ChartCell(), {
-    id: randomUUID(), versionId, name: input.name, edition: input.edition,
+    id: randomUUID(), versionId, shardId, name: input.name, edition: input.edition,
     updateNumber: input.updateNumber, updatesApplied: input.updatesApplied,
     source: metadata?.source ?? null, agencyCode: metadata?.agencyCode ?? null,
     issueDate: metadata?.issueDate ?? null,

@@ -11,6 +11,12 @@ server {
 
   # Tile data may live in the private Railway bucket. The API resolves PMTiles
   # byte ranges without exposing bucket credentials to mobile clients.
+  location ~ ^/tiles/soundg/(?<chart_z>[0-9]|1[0-6])/(?<chart_x>[0-9]+)/(?<chart_y>[0-9]+)\.pbf$ {
+    proxy_pass http://127.0.0.1:3001;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+  }
+
   location ~ ^/tiles/soundg/(?<chart_version>[A-Za-z0-9_-]+)/(?<chart_z>[0-9]|1[0-6])/(?<chart_x>[0-9]+)/(?<chart_y>[0-9]+)\.pbf$ {
     proxy_pass http://127.0.0.1:3001;
     proxy_set_header Host $http_host;

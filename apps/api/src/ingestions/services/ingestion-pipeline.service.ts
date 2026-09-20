@@ -40,10 +40,25 @@ export class IngestionPipelineService {
       if (!(await this.catalog.claimForProcessing(job.ingestionId!))) return;
       await this.archiveService.inspect(path.join(this.storageDirectory, job.archivePath!));
       await this.catalog.markProcessing(job.ingestionId!);
-      const result = await this.processor.process(job);
-      await this.catalog.markReady(job.ingestionId!, result);
-      await this.catalog.publishReadyVersion(job.versionId!);
-      this.logger.log(`Published chart version ${job.versionKey}`);
+      let publishedShards = 0;
+      const result = await this.processor.process(job, async (shard) => {
+        const revision = await this.catalog.publishShard(job.ingestionId!, shard);
+        publishedShards += 1;
+        this.logger.log(
+          `Published chart shard ${shard.shardKey} as catalog revision ${revision}`,
+        );
+      });
+      if (publishedShards > 0) {
+        await this.catalog.finishIncrementalIngestion(job.ingestionId!);
+        this.logger.log(
+          `Completed incremental chart ingestion ${job.versionKey} (${publishedShards} shards)`,
+        );
+      } else {
+        // Compatibility for processors/storage backends that do not emit shards.
+        await this.catalog.markReady(job.ingestionId!, result);
+        await this.catalog.publishReadyVersion(job.versionId!);
+        this.logger.log(`Published chart version ${job.versionKey}`);
+      }
     } catch (error) {
       this.logger.error(
         `Chart processing failed for ingestion ${job.ingestionId}`,
