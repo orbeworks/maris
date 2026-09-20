@@ -53,7 +53,7 @@ export class IngestionsService {
     const archivePath = path.join(ingestionDirectory, "source.zip");
 
     try {
-      this.dispatcher.ensureEnabled();
+      this.dispatcher.reserve();
       this.validateUpload(file);
       await this.assertZipSignature(file.path);
       const archive = await this.archiveService.inspect(file.path);
@@ -69,7 +69,7 @@ export class IngestionsService {
         sizeBytes: file.size,
         storagePath: path.relative(this.storageDirectory, archivePath),
       });
-      await this.dispatcher.dispatch({
+      this.dispatcher.dispatch({
         archivePath: ingestion.storagePath,
         ingestionId: ingestion.id,
         versionId: ingestion.versionId,
@@ -77,6 +77,7 @@ export class IngestionsService {
       });
       return ingestion;
     } catch (error) {
+      this.dispatcher.releaseReservation();
       await rm(file.path, { force: true });
       await rm(ingestionDirectory, { force: true, recursive: true });
       throw error;

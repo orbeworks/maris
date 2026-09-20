@@ -83,7 +83,8 @@ test('create validates, persists and dispatches a valid ENC upload', async () =>
     } as never,
     {
       dispatch: (job: unknown) => dispatched.push(job),
-      ensureEnabled: () => undefined,
+      releaseReservation: () => undefined,
+      reserve: () => undefined,
     } as never,
   );
 
@@ -124,7 +125,7 @@ test('create rejects an invalid extension before inspecting the archive', async 
     config(directory),
     { inspect: async () => { inspected = true; } } as never,
     {} as never,
-    { ensureEnabled: () => undefined } as never,
+    { releaseReservation: () => undefined, reserve: () => undefined } as never,
   );
 
   try {
@@ -151,7 +152,8 @@ test('create rejects a production upload and removes its temporary file', async 
     { inspect: async () => ARCHIVE } as never,
     {} as never,
     {
-      ensureEnabled: () => {
+      releaseReservation: () => undefined,
+      reserve: () => {
         throw new ServiceUnavailableException('ENC ingestion is disabled');
       },
     } as never,
@@ -177,7 +179,7 @@ test('create rejects a file without a ZIP signature', async () => {
     config(directory),
     { inspect: async () => { inspected = true; } } as never,
     {} as never,
-    { ensureEnabled: () => undefined } as never,
+    { releaseReservation: () => undefined, reserve: () => undefined } as never,
   );
 
   try {

@@ -159,7 +159,8 @@ test('valid upload is persisted and dispatches automatic processing', async () =
     } as never,
     {
       dispatch: (job: ProcessingJob) => dispatched.push(job),
-      ensureEnabled: () => undefined,
+      releaseReservation: () => undefined,
+      reserve: () => undefined,
     } as never,
   );
 

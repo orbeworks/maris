@@ -87,7 +87,11 @@ curl --fail-with-body \
   http://localhost:3001/ingestions/<id>
 ```
 
-Depois da resposta `received`, BullMQ enfileira a ingestão no Redis (`REDIS_URL`).
+Depois da resposta `received`, a própria API local inicia a ingestão diretamente,
+sem BullMQ e sem fila no Redis. Apenas uma ingestão ENC roda por vez; um segundo
+upload recebe `503` enquanto a primeira estiver em processamento. Jobs locais
+interrompidos são retomados a partir do estado persistido no PostgreSQL quando a
+API reinicia.
 O consumidor roda dentro da API, com concorrência local/global 1. São até três
 tentativas com backoff exponencial de 30 segundos; falta de espaço e ausência
 total de SOUNDG não são repetidas automaticamente. O ID da ingestão deduplica jobs.
@@ -103,7 +107,8 @@ Extrações e intermediários são apagados em `finally`; tiles incompletos tamb
 removidos pelo processo pai caso o gerador falhe. Antes de retomar a fila, a API
 limpa temporários órfãos. ZIPs originais não são retidos; versões publicadas são
 preservadas no bucket.
-BullMQ não reduz o espaço necessário para gerar os tiles de uma ingestão grande.
+Executar o processamento diretamente não reduz o espaço temporário necessário
+para gerar os tiles de uma ingestão grande.
 
 ## Pipeline e tiles vetoriais
 
@@ -263,7 +268,8 @@ e `tiles.pmtiles` ficam no Railway Bucket.
 ### Partes provisórias
 
 - o processamento roda localmente e depende do Mac permanecer ativo até o fim;
-- a fila é BullMQ/Redis local, enquanto PostgreSQL e bucket são de produção;
+- o executor ENC roda diretamente na API local, enquanto PostgreSQL e bucket
+  são de produção;
 - a API da Railway é somente leitora das ENCs publicadas no bucket;
 - a política de retenção ainda não foi implementada; por isso nenhuma versão
   antiga é removida automaticamente.
