@@ -57,9 +57,19 @@ ingestão roda apenas na API local (`ENC_PROCESSING_ENABLED=true`); a instância
 da Railway rejeita uploads porque opera com o processamento desativado.
 
 ```bash
+response=$(curl --fail-with-body --silent --show-error \
+  -F 'file=@artifacts/FL_ENCs.zip;type=application/zip' \
+  http://localhost:3001/ingestions/enc)
+echo "$response" | jq .
+```
+
+Execute o comando na raiz do repositório. A resposta contém o `id` usado para
+acompanhar o processamento:
+
+```bash
+ingestion_id=$(echo "$response" | jq -r .id)
 curl --fail-with-body \
-  -F 'file=@FL_ENCs.zip;type=application/zip' \
-  http://localhost:3001/ingestions/enc
+  "http://localhost:3001/ingestions/$ingestion_id"
 ```
 
 A API transmite o upload diretamente para disco, calcula SHA-256, valida a
@@ -92,21 +102,18 @@ sem BullMQ e sem fila no Redis. Apenas uma ingestão ENC roda por vez; um segund
 upload recebe `503` enquanto a primeira estiver em processamento. Jobs locais
 interrompidos são retomados a partir do estado persistido no PostgreSQL quando a
 API reinicia.
-O consumidor roda dentro da API, com concorrência local/global 1. São até três
-tentativas com backoff exponencial de 30 segundos; falta de espaço e ausência
-total de SOUNDG não são repetidas automaticamente. O ID da ingestão deduplica jobs.
-PostgreSQL reconcilia trabalhos pendentes com Redis a cada 30 segundos, inclusive
-quando o upload foi persistido mas Redis estava indisponível. Redis deve usar
-volume persistente e `maxmemory-policy=noeviction`.
+O executor roda dentro da API com concorrência local 1. O PostgreSQL guarda o
+estado necessário para retomar uma ingestão interrompida quando a API local é
+iniciada novamente; Redis não participa do processamento ENC.
 Os estados persistidos são `received`, `validating`, `processing`, `ready`,
 `failed` e `published`. O trabalho pesado roda em processos GDAL/gerador
 separados do processo HTTP. Ingestões interrompidas são retomadas na próxima
 inicialização da API.
 
 Extrações e intermediários são apagados em `finally`; tiles incompletos também são
-removidos pelo processo pai caso o gerador falhe. Antes de retomar a fila, a API
-limpa temporários órfãos. ZIPs originais não são retidos; versões publicadas são
-preservadas no bucket.
+removidos pelo processo pai caso o gerador falhe. Antes de retomar o processamento,
+a API limpa temporários órfãos. ZIPs originais não são retidos; versões publicadas
+são preservadas no bucket.
 Executar o processamento diretamente não reduz o espaço temporário necessário
 para gerar os tiles de uma ingestão grande.
 
