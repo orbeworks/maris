@@ -210,9 +210,10 @@ baixa o arquivo PMTiles inteiro.
 
 ### Carta no centro do mapa
 
-`GET /charts/at-point?lat=25.7&lon=-80.15&version=catalog-{revision}` retorna
-uma única carta e seus metadados. Sem `version`, consulta a versão publicada
-mais recente; o app sempre envia a mesma revisão imutável usada no `VectorSource`.
+`GET /charts/at-point?lat=25.7&lon=-80.15` retorna uma única carta e seus
+metadados usando o catálogo mais recente. O app envia somente latitude e
+longitude; a API escolhe a revisão. O parâmetro opcional `version=catalog-N`
+permanece disponível para diagnóstico e snapshots explícitos.
 O centro é consultado no MapLibre ao abrir/mover o painel Chart information,
 com debounce de 200 ms e cancelamento de respostas obsoletas.
 

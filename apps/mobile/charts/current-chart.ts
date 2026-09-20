@@ -62,7 +62,7 @@ export function useChartInformation(
           if (disposed) return;
           if (!view) throw new Error("Map center unavailable");
           const [lon, lat] = view.center;
-          const response = await fetch(`${apiUrl}/charts/at-point?lat=${lat}&lon=${lon}&version=${encodeURIComponent(version)}`, { signal: controller.signal });
+          const response = await fetch(`${apiUrl}/charts/at-point?lat=${lat}&lon=${lon}`, { signal: controller.signal });
           if (disposed) return;
           if (!response.ok) {
             setState({ chart: null, message: response.status === 404 || response.status === 409 ? "No nautical chart is available for this area." : "Chart information unavailable" });

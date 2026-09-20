@@ -41,7 +41,7 @@ test("chart requests use the actual map center/version and discard obsolete resp
     assert.equal(requests.length, 1);
     const first = new URL(requests[0].url);
     assert.equal(first.searchParams.get("lon"), "-80.15");
-    assert.equal(first.searchParams.get("version"), "soundg-v2");
+    assert.equal(first.searchParams.get("version"), null);
     center = [-80.2, 25.8];
     await act(async () => renderer!.update(React.createElement(Probe, { longitude: -80.2 })));
     assert.equal(requests[0].signal?.aborted, true);
