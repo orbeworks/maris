@@ -9,7 +9,10 @@ import { AppState } from "react-native";
 import type { MapRef } from "@maplibre/maplibre-react-native";
 import { offlineAreas } from "./offline-areas";
 import { activeAreas, type AreaRevision } from "./offline-engine";
-import type { AreaBounds } from "./offline-style";
+import {
+  usesCoordinateSoundgRoute,
+  type AreaBounds,
+} from "./offline-style";
 import { DEFAULT_MAP_ZOOM } from "../map-config";
 
 export const OFFLINE_VIEWPORT_DEBOUNCE_MS = 1500;
@@ -47,7 +50,13 @@ export function useAutomaticOffline(
     void offlineAreas
       .recover()
       .then((records) => {
-        if (mounted.current) setArea(activeAreas(records).at(-1) ?? null);
+        if (mounted.current) {
+          setArea(
+            activeAreas(records)
+              .filter((record) => usesCoordinateSoundgRoute(record.chart))
+              .at(-1) ?? null,
+          );
+        }
       })
       .catch((e) => console.warn("Offline recovery", e))
       .finally(() => {
@@ -74,7 +83,9 @@ export function useAutomaticOffline(
         (r) => r.state === "failed" && contains(r, target.bounds),
       );
       if (existing) {
-        if (mounted.current) setArea(existing);
+        if (mounted.current) {
+          setArea(usesCoordinateSoundgRoute(existing.chart) ? existing : null);
+        }
         if (Date.now() < retryAfter.current) return;
         if (
           Date.now() - (checked.current.get(existing.id) ?? 0) <

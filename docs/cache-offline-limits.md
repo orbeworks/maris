@@ -51,17 +51,15 @@ um teto artificial de RAM através de uma API inexistente, nem alterado o SDK.
 
 ## ENC/Nginx
 
-Os PBFs continuam pré-processados e imutáveis. Não mudamos o pipeline.
+Os PBFs continuam pré-processados, mas seleção de versão e composição de shards
+pertencem exclusivamente à API.
 
-- Arquivo existente: 200, ETag e cache `max-age=31536000, immutable`.
-- Tile ausente **de versão com manifest completo**: 204 sem corpo, cacheável
-  como ausência de conteúdo. MapLibre não precisa interpretar uma página HTML.
-- Versão desconhecida, URL inválida ou zoom fora de 0–16: 404 com `no-store`.
-- TileJSON continua `no-cache` e resolve a versão ativa no PostgreSQL.
-- O TileJSON acrescenta `?empty=204-v1` às URLs versionadas para evitar reutilizar
-  antigos 404 cacheados como immutable. Arquivos e versão não mudam, URLs antigas
-  continuam atendidas e packs anteriores não são removidos. A nova chave vale
-  quando o cliente recarrega o TileJSON; não existe push de atualização da source.
+- O cliente acessa apenas `/tiles/soundg/{z}/{x}/{y}.pbf`.
+- Tile existente: 200 e cache `max-age=30, must-revalidate`.
+- Tile sem conteúdo: 204 sem corpo com a mesma política de cache.
+- Coordenadas inválidas: 400. Rotas legadas contendo versão: 404 com `no-store`.
+- O TileJSON continua `no-cache`, expõe a revisão do catálogo para detecção de
+  atualização e nunca inclui IDs de versão na URL dos tiles.
 
 ## Vento: limites e ciclo de vida
 

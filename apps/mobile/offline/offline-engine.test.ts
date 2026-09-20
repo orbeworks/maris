@@ -53,7 +53,7 @@ function fixture() {
             }
           : {
               version,
-              tiles: [`https://test/${version}/{z}/{x}/{y}.pbf`],
+              tiles: [`https://test/tiles/soundg/{z}/{x}/{y}.pbf?catalog=${version}`],
               bounds: [-81, 25, -80, 26],
               minzoom: 8,
               maxzoom: 16,
@@ -153,6 +153,12 @@ test("new version replaces selection only after both packs complete; failure ret
   );
   assert.equal(activeAreas(await f.engine.list())[0].id, next.id);
   assert.ok((await f.engine.list()).some((r) => r.state === "failed"));
+});
+test("legacy version-selected tile routes are always considered outdated", async () => {
+  const f = fixture();
+  const old = await f.engine.download(options, () => {});
+  old.chart.tiles = ["https://test/tiles/soundg/v1/{z}/{x}/{y}.pbf"];
+  assert.equal(await f.engine.isOutdated(old, options.apiUrl), true);
 });
 test("interrupted publication is recovered only with two complete native packs", async () => {
   const f = fixture();

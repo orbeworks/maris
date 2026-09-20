@@ -1,7 +1,10 @@
 import { useEffect, useState, type RefObject } from "react";
 import { AppState } from "react-native";
 import type { MapRef } from "@maplibre/maplibre-react-native";
-import type { ChartSnapshot } from "../offline/offline-style";
+import {
+  usesCoordinateSoundgRoute,
+  type ChartSnapshot,
+} from "../offline/offline-style";
 import type { ChartInformation } from "./chart-information";
 
 // The same immutable version is used in VectorSource and metadata requests.
@@ -20,7 +23,7 @@ export function useOnlineChart(apiUrl: string, enabled: boolean) {
         const response = await fetch(`${apiUrl}/tiles/soundg.json`, { signal: controller.signal });
         if (!response.ok) throw new Error("Chart catalog unavailable");
         const result = await response.json() as ChartSnapshot;
-        if (!result.version || !result.tiles?.length || !result.tiles.every((url) => url.includes(`/${result.version}/`))) throw new Error("Invalid chart catalog");
+        if (!usesCoordinateSoundgRoute(result)) throw new Error("Invalid chart catalog");
         if (!disposed) setChart((current) =>
           current?.version === result.version ? current : result
         );

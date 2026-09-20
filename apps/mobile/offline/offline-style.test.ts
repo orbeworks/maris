@@ -9,7 +9,7 @@ import {
 
 const chart: ChartSnapshot = {
   version: "v1",
-  tiles: ["https://example.test/tiles/v1/{z}/{x}/{y}.pbf"],
+  tiles: ["https://example.test/tiles/soundg/{z}/{x}/{y}.pbf?catalog=v1"],
   bounds: [-81, 25, -80, 26],
   minzoom: 8,
   maxzoom: 16,
@@ -22,11 +22,11 @@ test("offline snapshot contains a pinned ENC source and required font, without c
   assert.equal(style.layers.length, 0);
   assert.equal(result.layers[0]["source-layer"], "soundings");
 });
-test("rejects mutable chart urls and invalid download bounds", () => {
+test("rejects version-selected chart urls and invalid download bounds", () => {
   assert.throws(() =>
     withOfflineSoundings(style, {
       ...chart,
-      tiles: ["https://example.test/latest/{z}/{x}/{y}.pbf"],
+      tiles: ["https://example.test/tiles/soundg/v1/{z}/{x}/{y}.pbf"],
     }),
   );
   assert.throws(() => validateArea([0, 0, 0, 1], 0, 16));

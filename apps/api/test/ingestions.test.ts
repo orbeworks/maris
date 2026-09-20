@@ -372,7 +372,7 @@ test('automatic pipeline reaches published after a successful job', async () => 
   }
 });
 
-test('TileJSON resolves the active version from PostgreSQL', async () => {
+test('TileJSON does not expose a legacy active version without catalog shards', async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   const directory = await mkdtemp(path.join(tmpdir(), 'maris-tilejson-test-'));
@@ -415,11 +415,9 @@ test('TileJSON resolves the active version from PostgreSQL', async () => {
       config({ CHART_STORAGE_DIR: directory }),
     );
     const tiles = new TilesService(storage, catalog);
-    const tileJson = await tiles.getTileJson('https://api.example.test');
-    assert.equal(tileJson.version, ingestion.versionKey);
-    assert.equal(
-      tileJson.tiles[0],
-      `https://api.example.test/tiles/soundg/${ingestion.versionKey}/{z}/{x}/{y}.pbf?empty=204-v1`,
+    await assert.rejects(
+      tiles.getTileJson('https://api.example.test'),
+      NotFoundException,
     );
   } finally {
     await database.destroy();
@@ -430,7 +428,7 @@ test('TileJSON resolves the active version from PostgreSQL', async () => {
 test('TileJSON returns not found when no ENC version is published', async () => {
   const tiles = new TilesService(
     {} as never,
-    { getActiveVersion: async () => null } as never,
+    { getPublishedCatalog: async () => null } as never,
   );
 
   await assert.rejects(

@@ -105,14 +105,11 @@ test('streaming PMTiles generation preserves MVT contents and publishes only arc
     await app.init();
     try {
       await request(app.getHttpServer()).get('/tiles/soundg/v1/14/4544/6981.pbf')
-        .expect(200).expect('Cache-Control', 'public, max-age=30, must-revalidate')
-        .expect('Content-Type', /application\/vnd.mapbox-vector-tile/);
-      await request(app.getHttpServer()).get('/tiles/soundg/v1/14/0/0.pbf')
-        .expect(204).expect('Cache-Control', 'public, max-age=30, must-revalidate');
+        .expect(404);
       await request(app.getHttpServer()).get('/tiles/soundg/missing/14/0/0.pbf')
-        .expect(404).expect('Cache-Control', 'no-store');
+        .expect(404);
       await request(app.getHttpServer()).get('/tiles/soundg/v1/14/999999/0.pbf')
-        .expect(400).expect('Cache-Control', 'no-store');
+        .expect(404);
     } finally { await app.close(); }
     const original = await readFile(path.join(versionPath, 'tiles.pmtiles'));
     await assert.rejects(promisify(execFile)(process.execPath, args), /already exists/);

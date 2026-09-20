@@ -73,7 +73,7 @@ test('catalog tile composition keeps the most detailed cell across immutable sha
   } as unknown as ChartCatalogService;
 
   const service = new TilesService(storage, catalog);
-  const output = await service.getTile('catalog-2', '8', '71', '109');
+  const output = await service.getLatestTile('8', '71', '109');
   assert.ok(output);
   const layer = new VectorTile(new Pbf(output)).layers.soundings;
   assert.equal(layer?.length, 1);

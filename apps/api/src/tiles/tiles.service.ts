@@ -45,30 +45,15 @@ export class TilesService {
   async getLatestTile(z: string, x: string, y: string): Promise<Buffer | undefined> {
     const latest = await this.catalog.getPublishedCatalog('soundg');
     if (!latest) throw new NotFoundException('No published SOUNDG catalog');
-    return this.getTile(`catalog-${latest.revision}`, z, x, y);
+    return this.getCatalogTile(latest.revision, z, x, y);
   }
 
-  async getTile(version: string, z: string, x: string, y: string): Promise<Buffer | undefined> {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(version) || ![z, x, y].every((v) => /^\d{1,10}$/.test(v))) {
-      throw new BadRequestException('Invalid tile coordinates or version');
+  private async getCatalogTile(revision: number, z: string, x: string, y: string): Promise<Buffer | undefined> {
+    if (![z, x, y].every((v) => /^\d{1,10}$/.test(v))) {
+      throw new BadRequestException('Invalid tile coordinates');
     }
     const zoom = Number(z), column = Number(x), row = Number(y);
     if (zoom > 16 || column >= 2 ** zoom || row >= 2 ** zoom) throw new BadRequestException('Invalid tile coordinates');
-    const catalogMatch = /^catalog-(\d+)$/.exec(version);
-    if (!catalogMatch) {
-      try {
-        return await this.chartStorage.getTile('soundg', version, zoom, column, row);
-      } catch (error) {
-        // Old app/offline snapshots may still contain an ingestion UUID whose
-        // artifact has already been retired. Resolve those URLs through the
-        // current catalog so installed clients do not need a binary update.
-        if (error instanceof NotFoundException) {
-          return this.getLatestTile(z, x, y);
-        }
-        throw error;
-      }
-    }
-    const revision = Number(catalogMatch[1]);
     const catalog = await this.catalog.getPublishedCatalog('soundg', revision);
     if (!catalog || catalog.revision !== revision) {
       throw new NotFoundException('Published chart catalog revision not found');
@@ -128,28 +113,7 @@ export class TilesService {
         version,
       };
     }
-    const active = await this.catalog.getActiveVersion('soundg');
-    if (!active) throw new NotFoundException('No published SOUNDG version');
-    const manifest = await this.chartStorage.getManifest(
-      'soundg',
-      active.version_key,
-    );
-    // A new cache key bypasses legacy immutable 404s without changing artifacts
-    // or deleting offline packs using the original versioned URLs.
-    const tileUrl = this.chartStorage.getTileUrl(manifest, baseUrl);
-    const tileUrlWithEmptyPolicy = `${tileUrl}${tileUrl.includes('?') ? '&' : '?'}empty=204-v1`;
-
-    return {
-      bounds: manifest.bounds,
-      maxzoom: manifest.maxzoom,
-      minzoom: manifest.minzoom,
-      name: manifest.name,
-      scheme: 'xyz',
-      tilejson: '3.0.0',
-      tiles: [tileUrlWithEmptyPolicy],
-      vector_layers: manifest.vectorLayers,
-      version: manifest.version,
-    };
+    throw new NotFoundException('No published SOUNDG catalog');
   }
 
   private async selectionForRevision(revision: number) {

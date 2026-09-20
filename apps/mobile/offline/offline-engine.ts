@@ -1,5 +1,6 @@
 import {
   validateArea,
+  usesCoordinateSoundgRoute,
   withOfflineSoundings,
   type AreaBounds,
   type ChartSnapshot,
@@ -117,7 +118,10 @@ export class OfflineAreas {
     const chart = await this.ports.json<ChartSnapshot>(
       `${apiUrl}/tiles/soundg.json`,
     );
-    return chart.version !== record.chart.version;
+    return (
+      chart.version !== record.chart.version ||
+      !usesCoordinateSoundgRoute(record.chart)
+    );
   }
   async download(
     options: DownloadOptions,

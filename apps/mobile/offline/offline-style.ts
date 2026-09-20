@@ -13,6 +13,16 @@ export type ChartSnapshot = {
   maxzoom: number;
 };
 
+const SOUNDG_COORDINATE_TILE = /\/tiles\/soundg\/\{z\}\/\{x\}\/\{y\}\.pbf(?:[?#]|$)/;
+
+export function usesCoordinateSoundgRoute(chart: ChartSnapshot) {
+  return Boolean(
+    chart.version &&
+      chart.tiles?.length &&
+      chart.tiles.every((url) => SOUNDG_COORDINATE_TILE.test(url)),
+  );
+}
+
 export function validateArea(
   bounds: AreaBounds,
   minZoom: number,
@@ -38,17 +48,14 @@ export function validateArea(
 }
 
 // Offline downloads only inspect style sources/layers: the runtime JSX source
-// is not sufficient. Pin ENC here, without relying on mutable soundg.json.
+// is not sufficient. The API owns shard/version selection; clients only send
+// tile coordinates. `version` is retained solely to detect stale downloads.
 export function withOfflineSoundings(
   style: StyleSnapshot,
   chart: ChartSnapshot,
 ): StyleSnapshot {
-  if (
-    !chart.version ||
-    !chart.tiles?.length ||
-    !chart.tiles.every((url) => url.includes(`/${chart.version}/`))
-  ) {
-    throw new Error("ENC TileJSON must contain immutable versioned URLs");
+  if (!usesCoordinateSoundgRoute(chart)) {
+    throw new Error("ENC TileJSON must use the coordinate-only SOUNDG route");
   }
   return {
     ...style,
