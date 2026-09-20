@@ -44,8 +44,9 @@ async function createApp(service: Partial<GfsService>) {
 
 test('GET /weather/gfs/tiles/:z/:x/:y returns a compressed deterministic tile', async () => {
   const tile = makeTestTile();
+  const inventory = { run: { runAt: tile.run }, files: new Set(['gfs.t12z.pgrb2.0p25.f000']) };
   const controller = new WeatherController({
-    getCompleteInventory: async () => ({ run: { runAt: tile.run }, tiles: [] }),
+    getCurrentForecast: async () => ({ inventory, sourceForecastHour: 0, validTime: tile.forecastTime }),
     getXyzTileFromInventory: async () => tile,
   } as unknown as GfsService);
   const headers = new Map<string, string>();
@@ -63,16 +64,22 @@ test('GET /weather/gfs/tiles/:z/:x/:y returns a compressed deterministic tile', 
   assert.equal(decoded.header.width, 2);
 });
 
-test('GFS tile Redis HIT avoids the origin lookup', async () => {
-  let originCalls = 0;
+test('current GFS tile Redis HIT avoids downloading and encoding the source tile', async () => {
+  let sourceTileCalls = 0;
   const cachedBody = Buffer.from('cached-gfs-tile');
+  const tile = makeTestTile();
+  const inventory = { run: { runAt: tile.run }, files: new Set(['gfs.t12z.pgrb2.0p25.f004']) };
   const controller = new WeatherController(
     {
-      getCompleteInventory: async () => {
-        originCalls += 1;
-        throw new Error('origin should not be called on a Redis HIT');
+      getCurrentForecast: async () => ({
+        inventory,
+        sourceForecastHour: 4,
+        validTime: '2026-09-18T16:00:00.000Z',
+      }),
+      getXyzTileFromInventory: async () => {
+        sourceTileCalls += 1;
+        throw new Error('source tile should not be downloaded on a Redis HIT');
       },
-      getXyzTileFromInventory: async () => { throw new Error('origin should not be called on a Redis HIT'); },
     } as GfsService,
     {
       getActiveRun: async () => ({ run: '20260918T12', status: 'READY' }),
@@ -96,15 +103,17 @@ test('GFS tile Redis HIT avoids the origin lookup', async () => {
     response,
   );
 
-  assert.equal(originCalls, 0);
+  assert.equal(sourceTileCalls, 0);
   assert.equal(body, cachedBody);
   assert.match(headers.get('ETag') ?? '', /^"[0-9a-f]{64}"$/);
 });
 
 test('GFS tiles return 304 for a matching ETag without a body', async () => {
+  const tile = makeTestTile();
+  const inventory = { run: { runAt: tile.run }, files: new Set(['gfs.t12z.pgrb2.0p25.f000']) };
   const app = await createApp({
-    getCompleteInventory: async () => ({ run: { runAt: makeTestTile().run }, tiles: [] }),
-    getXyzTileFromInventory: async () => makeTestTile(),
+    getCurrentForecast: async () => ({ inventory, sourceForecastHour: 0, validTime: tile.forecastTime }),
+    getXyzTileFromInventory: async () => tile,
   } as never);
   try {
     const first = await request(app.getHttpServer())

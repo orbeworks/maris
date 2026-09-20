@@ -9,7 +9,11 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { GfsService } from "./gfs.service.js";
 import { encodeGfsTile } from "./gfs-tiles.js";
-import { GfsRedisCacheService, gfsRunId } from "./gfs-redis-cache.service.js";
+import {
+  GfsRedisCacheService,
+  gfsCurrentRunId,
+  gfsRunId,
+} from "./gfs-redis-cache.service.js";
 import {
   GFS_MAX_WEATHER_ZOOM,
   xyzTileCount,
@@ -100,11 +104,22 @@ export class GfsPrefetchService
       );
       this.lockRenewal.unref();
 
-      const inventory = await this.gfs.getCompleteInventory(this.forecastHours);
-      const run = gfsRunId(inventory.run.runAt);
+      const currentOnly = this.forecastHours.length === 1 && this.forecastHours[0] === 0;
+      const current = currentOnly ? await this.gfs.getCurrentForecast() : undefined;
+      const inventory = current?.inventory ??
+        await this.gfs.getCompleteInventory(this.forecastHours);
+      const run = current
+        ? gfsCurrentRunId(inventory.run.runAt, current.sourceForecastHour)
+        : gfsRunId(inventory.run.runAt);
       const tasks = this.tasks();
       const sourceCache = new Map<string, Awaited<ReturnType<GfsService["getTileFromInventory"]>>>();
-      const estimatedRedisBytes = await this.estimateRedisBytes(inventory, tasks.length, sourceCache);
+      const estimatedRedisBytes = await this.estimateRedisBytes(
+        inventory,
+        tasks.length,
+        sourceCache,
+        run,
+        current?.sourceForecastHour,
+      );
       if (estimatedRedisBytes > this.maxEstimatedRedisBytes) {
         this.logger.warn(
           `run=${run} prefetch aborted: estimatedRedisBytes=${estimatedRedisBytes} exceeds max=${this.maxEstimatedRedisBytes}`,
@@ -142,10 +157,12 @@ export class GfsPrefetchService
                 task.z,
                 task.x,
                 task.y,
-                task.forecastHour,
+                current?.sourceForecastHour ?? task.forecastHour,
                 sourceCache,
               );
-              const body = gzipSync(encodeGfsTile(grid));
+              const body = gzipSync(encodeGfsTile(
+                current ? { ...grid, forecastHour: 0 } : grid,
+              ));
               if (!(await this.redis.setTile(run, task.forecastHour, task.x, task.y, body, task.z))) {
                 throw new Error("Redis SET failed");
               }
@@ -218,9 +235,10 @@ export class GfsPrefetchService
     inventory: Awaited<ReturnType<GfsService["getCompleteInventory"]>>,
     taskCount: number,
     sourceCache: Map<string, Awaited<ReturnType<GfsService["getTileFromInventory"]>>>,
+    run: string,
+    currentSourceForecastHour?: number,
   ) {
     if (taskCount === 0) return 0;
-    const run = gfsRunId(inventory.run.runAt);
     if (this.estimatedRun === run && this.estimatedRunBytes !== undefined) {
       return this.estimatedRunBytes;
     }
@@ -230,9 +248,18 @@ export class GfsPrefetchService
         let totalSampleBytes = 0;
         for (const z of GFS_ZOOMS) {
           const grid = await this.gfs.getXyzTileFromInventory(
-            inventory, z, 0, 0, forecastHour, sourceCache,
+            inventory,
+            z,
+            0,
+            0,
+            currentSourceForecastHour ?? forecastHour,
+            sourceCache,
           );
-          totalSampleBytes += gzipSync(encodeGfsTile(grid)).byteLength;
+          totalSampleBytes += gzipSync(encodeGfsTile(
+            currentSourceForecastHour === undefined
+              ? grid
+              : { ...grid, forecastHour: 0 },
+          )).byteLength;
         }
         samples.push(totalSampleBytes);
       } catch (error) {

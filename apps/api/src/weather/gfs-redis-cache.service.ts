@@ -10,6 +10,10 @@ export function gfsRunId(run: string) {
   return match ? `${match[1]}${match[2]}${match[3]}T${match[4]}` : run;
 }
 
+export function gfsCurrentRunId(run: string, sourceForecastHour: number) {
+  return `${gfsRunId(run)}F${String(sourceForecastHour).padStart(3, "0")}`;
+}
+
 const ACTIVE_RUN_KEY = "gfs:active-run";
 const LOCK_KEY = "gfs:global-prefetch-lock";
 const RELEASE_LOCK_SCRIPT =

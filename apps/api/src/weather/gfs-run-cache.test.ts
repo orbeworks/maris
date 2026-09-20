@@ -235,3 +235,57 @@ test("run candidates never include a future cycle", () => {
     "20260919/00", "20260918/18", "20260918/12", "20260918/06",
   ]);
 });
+
+test("current forecast resolves hour zero to the closest UTC valid time", async () => {
+  const service = serviceWithTtl();
+  const inventory = {
+    run: {
+      date: "20260920",
+      cycle: 18,
+      runAt: "2026-09-20T18:00:00.000Z",
+      baseUrl: "https://example.test/gfs.20260920/18/atmos",
+    },
+    files: new Set([
+      "gfs.t18z.pgrb2.0p25.f000",
+      "gfs.t18z.pgrb2.0p25.f001",
+      "gfs.t18z.pgrb2.0p25.f002",
+      "gfs.t18z.pgrb2.0p25.f003",
+      "gfs.t18z.pgrb2.0p25.f004",
+      "gfs.t18z.pgrb2.0p25.f005",
+    ]),
+  };
+  (service as unknown as { findCompleteInventory: () => Promise<typeof inventory> })
+    .findCompleteInventory = async () => inventory;
+
+  const current = await service.getCurrentForecast(
+    new Date("2026-09-20T19:18:00-03:00"),
+  );
+
+  assert.equal(current.sourceForecastHour, 4);
+  assert.equal(current.validTime, "2026-09-20T22:00:00.000Z");
+});
+
+test("current forecast breaks an exact tie toward the earlier valid time", async () => {
+  const service = serviceWithTtl();
+  const inventory = {
+    run: {
+      date: "20260920",
+      cycle: 18,
+      runAt: "2026-09-20T18:00:00.000Z",
+      baseUrl: "https://example.test/gfs.20260920/18/atmos",
+    },
+    files: new Set([
+      "gfs.t18z.pgrb2.0p25.f004",
+      "gfs.t18z.pgrb2.0p25.f005",
+    ]),
+  };
+  (service as unknown as { findCompleteInventory: () => Promise<typeof inventory> })
+    .findCompleteInventory = async () => inventory;
+
+  const current = await service.getCurrentForecast(
+    new Date("2026-09-20T22:30:00.000Z"),
+  );
+
+  assert.equal(current.sourceForecastHour, 4);
+  assert.equal(current.validTime, "2026-09-20T22:00:00.000Z");
+});

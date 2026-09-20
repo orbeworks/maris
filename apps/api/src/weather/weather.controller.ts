@@ -15,7 +15,11 @@ import { gzipSync } from "node:zlib";
 
 import { GfsService } from "./gfs.service.js";
 import { encodeGfsTile } from "./gfs-tiles.js";
-import { GfsRedisCacheService, gfsRunId } from "./gfs-redis-cache.service.js";
+import {
+  GfsRedisCacheService,
+  gfsCurrentRunId,
+  gfsRunId,
+} from "./gfs-redis-cache.service.js";
 import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./gfs-xyz.js";
 
 const GFS_SUCCESS_CACHE_CONTROL =
@@ -61,35 +65,51 @@ export class WeatherController {
         "Invalid GFS tile coordinate or forecast hour",
       );
     }
-    const activeRun = await this.redisCache?.getActiveRun();
-    const cachedBody = activeRun
-      ? await this.redisCache?.getTile(
-          activeRun.run,
+    let body: Buffer | null | undefined;
+    if (forecastHour === 0) {
+      const current = await this.gfsService.getCurrentForecast();
+      const cacheRun = gfsCurrentRunId(
+        current.inventory.run.runAt,
+        current.sourceForecastHour,
+      );
+      body = await this.redisCache?.getTile(cacheRun, 0, x, y, z);
+      if (!body) {
+        const source = await this.gfsService.getXyzTileFromInventory(
+          current.inventory,
+          z,
+          x,
+          y,
+          current.sourceForecastHour,
+        );
+        // `0` remains the mobile contract for "current". forecastTime retains
+        // the actual GFS valid time selected by the API.
+        body = gzipSync(encodeGfsTile({ ...source, forecastHour: 0 }));
+        await this.redisCache?.setTile(cacheRun, 0, x, y, body, z);
+      }
+    } else {
+      const activeRun = await this.redisCache?.getActiveRun();
+      body = activeRun
+        ? await this.redisCache?.getTile(activeRun.run, forecastHour, x, y, z)
+        : null;
+      if (!body) {
+        const inventory = await this.gfsService.getCompleteInventory([forecastHour]);
+        const grid = await this.gfsService.getXyzTileFromInventory(
+          inventory,
+          z,
+          x,
+          y,
+          forecastHour,
+        );
+        body = gzipSync(encodeGfsTile(grid));
+        await this.redisCache?.setTile(
+          gfsRunId(grid.run),
           forecastHour,
           x,
           y,
+          body,
           z,
-        )
-      : null;
-    let body = cachedBody;
-    if (!body) {
-      const inventory = await this.gfsService.getCompleteInventory([forecastHour]);
-      const grid = await this.gfsService.getXyzTileFromInventory(
-        inventory,
-        z,
-        x,
-        y,
-        forecastHour,
-      );
-      body = gzipSync(encodeGfsTile(grid));
-      await this.redisCache?.setTile(
-        gfsRunId(grid.run),
-        forecastHour,
-        x,
-        y,
-        body,
-        z,
-      );
+        );
+      }
     }
     const etag = etagFor(body);
     response.set("Cache-Control", GFS_SUCCESS_CACHE_CONTROL);

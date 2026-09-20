@@ -42,6 +42,12 @@ export type Inventory = {
   files: Set<string>;
 };
 
+export type CurrentGfsForecast = {
+  inventory: Inventory;
+  sourceForecastHour: number;
+  validTime: string;
+};
+
 type CachedGfsRun = {
   inventory: Inventory;
   storedAt: number;
@@ -108,6 +114,7 @@ export class GfsService {
   private negativeCacheStores = 0;
   private negativeCacheHits = 0;
   private skippedRunProbes = 0;
+  private currentForecastLogKey = "";
 
   constructor(private readonly config: ConfigService) {}
 
@@ -130,6 +137,42 @@ export class GfsService {
 
   async getCompleteInventory(forecastHours: number[]): Promise<Inventory> {
     return this.findCompleteInventory(this.normalizeForecastHours(forecastHours));
+  }
+
+  async getCurrentForecast(now = new Date()): Promise<CurrentGfsForecast> {
+    const inventory = await this.findCompleteInventory([0]);
+    const runAtMs = Date.parse(inventory.run.runAt);
+    if (!Number.isFinite(runAtMs)) {
+      throw new ServiceUnavailableException("GFS run has an invalid initialization time");
+    }
+    const elapsedHours = Math.max(0, (now.getTime() - runAtMs) / 3_600_000);
+    const availableHours = [...inventory.files]
+      .flatMap((file) => {
+        const match = /\.f(\d{3})$/.exec(file);
+        return match?.[1] ? [Number(match[1])] : file.endsWith(".anl") ? [0] : [];
+      })
+      .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 384);
+    if (availableHours.length === 0) {
+      throw new ServiceUnavailableException("GFS run has no forecast hours");
+    }
+    const sourceForecastHour = availableHours.reduce((closest, hour) => {
+      const difference = Math.abs(hour - elapsedHours);
+      const closestDifference = Math.abs(closest - elapsedHours);
+      return difference < closestDifference ||
+        (difference === closestDifference && hour < closest)
+        ? hour
+        : closest;
+    });
+    const validTime = new Date(runAtMs + sourceForecastHour * 3_600_000).toISOString();
+    const logKey = `${inventory.run.runAt}|${sourceForecastHour}`;
+    if (this.currentForecastLogKey !== logKey) {
+      this.currentForecastLogKey = logKey;
+      const deltaMinutes = Math.round((Date.parse(validTime) - now.getTime()) / 60_000);
+      this.logger.log(
+        `[GFS current] serverNowUtc=${now.toISOString()} serverTimezone=${Intl.DateTimeFormat().resolvedOptions().timeZone} serverUtcOffsetMinutes=${-now.getTimezoneOffset()} runAtUtc=${inventory.run.runAt} sourceForecastHour=${sourceForecastHour} validTimeUtc=${validTime} deltaMinutes=${deltaMinutes}`,
+      );
+    }
+    return { inventory, sourceForecastHour, validTime };
   }
 
   async getTileFromInventory(
