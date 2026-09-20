@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { NotFoundException } from '@nestjs/common';
 import vtpbf from 'vt-pbf';
 
 import { TilesService } from '../src/tiles/tiles.service.js';
 import type { ChartStorage } from '../src/tiles/storage/chart-storage.js';
 import type { ChartCatalogService } from '../src/ingestions/services/chart-catalog.service.js';
+import { ObjectChartStorageService } from '../src/tiles/storage/object-chart-storage.service.js';
+import type { ObjectStorageService } from '../src/storage/object-storage.service.js';
 
 const require = createRequire(import.meta.url);
 const vtpbfEntry = require.resolve('vt-pbf');
@@ -83,4 +86,33 @@ test('catalog tile composition keeps the most detailed cell across immutable sha
     'https://api.example/tiles/soundg/{z}/{x}/{y}.pbf?empty=204-v2',
   );
   assert.ok(await service.getLatestTile('8', '71', '109'));
+});
+
+test('concurrent missing manifests normalize every shared S3 rejection and allow retry', async () => {
+  let calls = 0;
+  const objects = {
+    async getText() {
+      calls += 1;
+      await new Promise((resolve) => setImmediate(resolve));
+      throw Object.assign(new Error('missing'), {
+        name: 'NoSuchKey',
+        $metadata: { httpStatusCode: 404 },
+      });
+    },
+  } as unknown as ObjectStorageService;
+  const storage = new ObjectChartStorageService(objects);
+  const results = await Promise.allSettled([
+    storage.getManifest('soundg', 'retired'),
+    storage.getManifest('soundg', 'retired'),
+    storage.getManifest('soundg', 'retired'),
+  ]);
+  assert.equal(calls, 1);
+  assert.ok(results.every((result) =>
+    result.status === 'rejected' && result.reason instanceof NotFoundException
+  ));
+  await assert.rejects(
+    storage.getManifest('soundg', 'retired'),
+    NotFoundException,
+  );
+  assert.equal(calls, 2);
 });

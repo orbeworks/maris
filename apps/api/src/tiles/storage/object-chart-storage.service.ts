@@ -22,18 +22,21 @@ export class ObjectChartStorageService implements ChartStorage {
     this.assertSafeSegment(dataset);
     this.assertSafeSegment(version);
     const key = this.key(dataset, version, 'manifest.json');
-    const cached = this.manifestCache.get(key);
-    if (cached) return cached;
-    const loading = this.loadManifest(key, dataset, version);
-    this.manifestCache.set(key, loading);
-    if (this.manifestCache.size > 64) {
-      const oldest = this.manifestCache.keys().next().value as string | undefined;
-      if (oldest && oldest !== key) this.manifestCache.delete(oldest);
+    let loading = this.manifestCache.get(key);
+    if (!loading) {
+      loading = this.loadManifest(key, dataset, version);
+      this.manifestCache.set(key, loading);
+      if (this.manifestCache.size > 64) {
+        const oldest = this.manifestCache.keys().next().value as string | undefined;
+        if (oldest && oldest !== key) this.manifestCache.delete(oldest);
+      }
     }
     try {
       return await loading;
     } catch (error) {
-      this.manifestCache.delete(key);
+      // Every waiter must normalize a shared S3 rejection. Only remove this
+      // exact promise so an older waiter cannot evict a newer retry.
+      if (this.manifestCache.get(key) === loading) this.manifestCache.delete(key);
       const status = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
       if (status === 404 || (error as { name?: string }).name === 'NoSuchKey') {
         throw new NotFoundException(`No published dataset named ${dataset}`);
