@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { ProcessingCleanupService } from './processing-cleanup.service.js';
 import { EncArchiveService } from './enc-archive.service.js';
 import { coverageCells } from '../../charts/models/chart-selection.js';
+import { ObjectStorageService } from '../../storage/object-storage.service.js';
 
 import type {
   EncMetadataFeature,
@@ -35,6 +36,8 @@ export class EncProcessingService {
     private readonly cleanup: ProcessingCleanupService = new ProcessingCleanupService(config),
     @Inject(EncArchiveService)
     protected readonly archiveService: EncArchiveService = new EncArchiveService(config),
+    @Inject(ObjectStorageService)
+    private readonly objectStorage: ObjectStorageService = undefined as never,
   ) {
     this.storageDirectory = path.resolve(
       config.getOrThrow<string>('STORAGE_DIR'),
@@ -45,6 +48,7 @@ export class EncProcessingService {
   }
 
   async process(job: ProcessingJob): Promise<ProcessingResult> {
+    let removeLocalArtifacts = false;
     const archivePath = path.join(this.storageDirectory, job.archivePath);
     const workDirectory = path.join(
       this.storageDirectory,
@@ -99,8 +103,8 @@ export class EncProcessingService {
           updateNumber: Math.max(metadata.updateNumber, ...updatesApplied, 0),
           updatesApplied,
         });
-        // Never retain an extracted cell between batches. The source ZIP remains
-        // on the Railway volume and is reopened lazily for the next cell.
+        // Never retain an extracted cell between batches. The temporary local
+        // source ZIP is reopened lazily for the next cell and removed afterward.
         await rm(extractedDirectory, { force: true, recursive: true });
       }
 
@@ -110,13 +114,37 @@ export class EncProcessingService {
         job.versionKey,
       );
       const manifestPath = path.posix.join(storagePath, 'manifest.json');
+      const localRoot = path.join(this.chartStorageDirectory, storagePath);
+      const remotePrefix = `datasets/soundg/${job.versionKey}`;
+      if (this.objectStorage?.enabled) {
+        const [remoteManifest, remoteArtifact] = await Promise.all([
+          this.objectStorage.tryHead(`${remotePrefix}/manifest.json`),
+          this.objectStorage.tryHead(`${remotePrefix}/tiles.pmtiles`),
+        ]);
+        if (remoteManifest && remoteArtifact) {
+          const manifest = JSON.parse(await this.objectStorage.getText(`${remotePrefix}/manifest.json`)) as GeneratedManifest;
+          return {
+            bounds: manifest.bounds,
+            cells,
+            manifestPath,
+            storagePath,
+            artifactObjectKey: `${remotePrefix}/tiles.pmtiles`,
+            manifestObjectKey: `${remotePrefix}/manifest.json`,
+          };
+        }
+      }
       const existingManifest = await this.readManifestIfPresent(manifestPath);
       if (existingManifest) {
+        const remote = this.objectStorage?.enabled
+          ? await this.publishArtifacts(job.versionKey, localRoot)
+          : undefined;
+        removeLocalArtifacts = Boolean(remote);
         return {
           bounds: existingManifest.bounds,
           cells,
           manifestPath,
           storagePath,
+          ...(remote ?? {}),
         };
       }
 
@@ -165,13 +193,40 @@ export class EncProcessingService {
         ),
       ) as GeneratedManifest;
 
-      return { bounds: manifest.bounds, cells, manifestPath, storagePath };
+      const remote = this.objectStorage?.enabled
+        ? await this.publishArtifacts(job.versionKey, localRoot)
+        : undefined;
+      removeLocalArtifacts = Boolean(remote);
+      return { bounds: manifest.bounds, cells, manifestPath, storagePath, ...(remote ?? {}) };
     } finally {
       await Promise.all([
         rm(workDirectory, { force: true, recursive: true, maxRetries: 3 }),
         this.cleanup.cleanVersion(job.versionKey),
+        ...(removeLocalArtifacts
+          ? [rm(path.join(this.chartStorageDirectory, 'soundg', 'versions', job.versionKey), { force: true, recursive: true, maxRetries: 3 })]
+          : []),
       ]);
     }
+  }
+
+  private async publishArtifacts(versionKey: string, localRoot: string) {
+    if (!this.objectStorage?.enabled) return undefined;
+    const artifactObjectKey = `datasets/soundg/${versionKey}/tiles.pmtiles`;
+    const manifestObjectKey = `datasets/soundg/${versionKey}/manifest.json`;
+    const localArtifact = path.join(localRoot, 'tiles.pmtiles');
+    const expectedSize = (await stat(localArtifact)).size;
+    const existingArtifact = await this.objectStorage.tryHead(artifactObjectKey);
+    if (!existingArtifact || Number(existingArtifact.ContentLength ?? 0) !== expectedSize) {
+      await this.objectStorage.putFile(artifactObjectKey, localArtifact, 'application/vnd.pmtiles');
+    }
+    await this.objectStorage.putFile(manifestObjectKey, path.join(localRoot, 'manifest.json'), 'application/json');
+    const [artifact, manifest] = await Promise.all([
+      this.objectStorage.head(artifactObjectKey),
+      this.objectStorage.head(manifestObjectKey),
+    ]);
+    if (Number(artifact.ContentLength ?? 0) !== expectedSize) throw new Error('Published PMTiles object failed validation');
+    if (Number(manifest.ContentLength ?? 0) <= 0) throw new Error('Published PMTiles manifest is empty');
+    return { artifactObjectKey, manifestObjectKey };
   }
 
   private async readManifestIfPresent(manifestPath: string) {

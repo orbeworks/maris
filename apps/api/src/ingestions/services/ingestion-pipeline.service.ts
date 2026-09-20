@@ -38,9 +38,7 @@ export class IngestionPipelineService {
         return;
       }
       if (!(await this.catalog.claimForProcessing(job.ingestionId!))) return;
-      await this.archiveService.inspect(
-        path.join(this.storageDirectory, job.archivePath!),
-      );
+      await this.archiveService.inspect(path.join(this.storageDirectory, job.archivePath!));
       await this.catalog.markProcessing(job.ingestionId!);
       const result = await this.processor.process(job);
       await this.catalog.markReady(job.ingestionId!, result);
@@ -53,6 +51,20 @@ export class IngestionPipelineService {
       );
       if (job.ingestionId) await this.catalog.markFailed(job.ingestionId, error);
       if (propagateFailure) throw error;
-    } finally { await rm(path.join(this.storageDirectory, '.processing', job.ingestionId), { force: true, recursive: true }); }
+    } finally {
+      await rm(path.join(this.storageDirectory, '.processing', job.ingestionId), { force: true, recursive: true });
+    }
+  }
+
+  async removeSource(job: ProcessingJob) {
+    const expected = path.posix.join('ingestions', job.ingestionId, 'source.zip');
+    if (job.archivePath.replaceAll('\\', '/') !== expected) {
+      throw new Error(`Refusing to remove unexpected ENC source path: ${job.archivePath}`);
+    }
+    await rm(path.join(this.storageDirectory, 'ingestions', job.ingestionId), {
+      force: true,
+      recursive: true,
+      maxRetries: 3,
+    });
   }
 }

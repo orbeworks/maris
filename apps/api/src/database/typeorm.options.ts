@@ -13,15 +13,21 @@ import { AddSourceObjectKey2026091802000 } from './migrations/2026091802000-add-
 import { AddArtifactObjectKeys2026091803000 } from './migrations/2026091803000-add-artifact-object-keys.js';
 import { AddSourceUrl2026091804000 } from './migrations/2026091804000-add-source-url.js';
 import { AddEncObjectKey2026091805000 } from './migrations/2026091805000-add-enc-object-key.js';
-import { RemoveObjectStorage2026091900000 } from './migrations/2026091900000-remove-object-storage.js';
+import { EnsureObjectStorage2026092000000 } from './migrations/2026092000000-ensure-object-storage.js';
+import { DropSourceObjectStorage2026092001000 } from './migrations/2026092001000-drop-source-object-storage.js';
 
-export function createTypeOrmOptions(databaseUrl: string): DataSourceOptions {
+export function createTypeOrmOptions(
+  databaseUrl: string,
+  migrationsRun = true,
+): DataSourceOptions {
   return {
     type: 'postgres',
     url: databaseUrl,
     entities: [ChartDataset, ChartIngestion, ChartVersion, ChartCell, ChartCoverage, ChartSurvey],
-    migrations: [CreateChartCatalog2026091700000, ModelEncMetadata2026091800000, CreateEncUploads2026091801000, AddSourceObjectKey2026091802000, AddArtifactObjectKeys2026091803000, AddSourceUrl2026091804000, AddEncObjectKey2026091805000, RemoveObjectStorage2026091900000],
-    migrationsRun: true,
+    // RemoveObjectStorage was never deployed to production and is intentionally
+    // omitted. EnsureObjectStorage also repairs databases where it did run.
+    migrations: [CreateChartCatalog2026091700000, ModelEncMetadata2026091800000, CreateEncUploads2026091801000, AddSourceObjectKey2026091802000, AddArtifactObjectKeys2026091803000, AddSourceUrl2026091804000, AddEncObjectKey2026091805000, EnsureObjectStorage2026092000000, DropSourceObjectStorage2026092001000],
+    migrationsRun,
     synchronize: false,
   };
 }

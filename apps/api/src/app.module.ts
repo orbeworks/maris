@@ -9,6 +9,7 @@ import { TilesModule } from './tiles/tiles.module.js';
 import { WeatherModule } from './weather/weather.module.js';
 import { ChartsModule } from './charts/charts.module.js';
 import { RequestTimingMiddleware } from './request-timing.middleware.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RequestTimingMiddleware } from './request-timing.middleware.js';
       validate: validateEnv,
     }),
     DatabaseModule,
+    StorageModule,
     HealthModule,
     IngestionsModule,
     TilesModule,

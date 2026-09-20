@@ -47,6 +47,8 @@ export type ProcessingResult = {
   cells: ProcessedCell[];
   manifestPath: string;
   storagePath: string;
+  artifactObjectKey?: string;
+  manifestObjectKey?: string;
 };
 
 export type ProcessingJob = {

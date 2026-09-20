@@ -9,38 +9,12 @@ server {
     proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
   }
 
-  # Compatibility URL used by the current TileJSON.
-  # Legacy loose tiles stay static. PMTiles versions are read by the API.
+  # Tile data may live in the private Railway bucket. The API resolves PMTiles
+  # byte ranges without exposing bucket credentials to mobile clients.
   location ~ ^/tiles/soundg/(?<chart_version>[A-Za-z0-9_-]+)/(?<chart_z>[0-9]|1[0-6])/(?<chart_x>[0-9]+)/(?<chart_y>[0-9]+)\.pbf$ {
-    # Only completed, immutable artifacts have a manifest. Unknown versions
-    # must remain real, non-cacheable errors, not successful empty tiles.
-    error_page 404 = @chart_not_found;
-    if (!-f /app/.storage/chart-data/soundg/versions/$chart_version/manifest.json) { return 404; }
-    error_page 418 = @pmtiles;
-    if (-f /app/.storage/chart-data/soundg/versions/$chart_version/tiles.pmtiles) { return 418; }
-    rewrite ^ /chart-data/soundg/versions/$chart_version/$chart_z/$chart_x/$chart_y.pbf break;
-    root /app/.storage;
-    try_files $uri @empty_chart_tile;
-    default_type application/vnd.mapbox-vector-tile;
-    add_header Cache-Control "public, max-age=31536000, immutable";
-    etag on;
-  }
-
-  location @pmtiles {
     proxy_pass http://127.0.0.1:3001;
     proxy_set_header Host $http_host;
     proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-  }
-
-  location @empty_chart_tile {
-    default_type application/vnd.mapbox-vector-tile;
-    add_header Cache-Control "public, max-age=31536000, immutable";
-    return 204;
-  }
-
-  location @chart_not_found {
-    add_header Cache-Control "no-store" always;
-    return 404;
   }
 
   location /tiles/soundg/ {

@@ -191,6 +191,8 @@ export class ChartCatalogService {
           errorMessage: null,
           errorStack: null,
           manifestPath: result.manifestPath,
+          artifactObjectKey: result.artifactObjectKey ?? null,
+          manifestObjectKey: result.manifestObjectKey ?? null,
           processedAt: new Date(),
           status: 'ready',
           storagePath: result.storagePath,

@@ -52,7 +52,9 @@ pnpm dev:api
 
 ### Receber um conjunto ENC
 
-`POST /ingestions/enc` recebe um único campo multipart chamado `file`.
+`POST /ingestions/enc` recebe um único campo multipart chamado `file`. A
+ingestão roda apenas na API local (`ENC_PROCESSING_ENABLED=true`); a instância
+da Railway rejeita uploads porque opera com o processamento desativado.
 
 ```bash
 curl --fail-with-body \
@@ -63,8 +65,9 @@ curl --fail-with-body \
 A API transmite o upload diretamente para disco, calcula SHA-256, valida a
 estrutura ZIP, bloqueia caminhos inseguros e arquivos criptografados, confere
 os limites de expansão e identifica as células S-57 `.000` e seus updates.
-O ZIP original fica em `.storage/ingestions/<id>` e os metadados são persistidos
-no PostgreSQL.
+O ZIP fica temporariamente em `.storage/ingestions/<id>` no Mac. Ele não é
+enviado ao bucket e é apagado quando o job termina ou esgota suas tentativas.
+Os metadados são persistidos no PostgreSQL.
 
 O schema é controlado por entities e migrations do TypeORM. A API executa
 somente migrations pendentes, registradas na tabela `migrations`; ela não usa
@@ -98,9 +101,8 @@ inicialização da API.
 
 Extrações e intermediários são apagados em `finally`; tiles incompletos também são
 removidos pelo processo pai caso o gerador falhe. Antes de retomar a fila, a API
-limpa temporários órfãos. ZIPs originais e versões publicadas são preservados.
-Esta implantação continua com uma única réplica da API/volume; não habilitar
-réplicas compartilhando a limpeza sem implementar coordenação do storage.
+limpa temporários órfãos. ZIPs originais não são retidos; versões publicadas são
+preservadas no bucket.
 BullMQ não reduz o espaço necessário para gerar os tiles de uma ingestão grande.
 
 ## Pipeline e tiles vetoriais
@@ -124,7 +126,7 @@ aplica os updates com `UPDATES=APPLY`, normaliza `SOUNDG`, executa
 versão como `ready`. Se a pasta da versão já existir, a geração falha em vez de
 sobrescrever artefatos publicados.
 
-O storage local/Railway tem esta estrutura:
+O storage de cartas, local ou no Railway Bucket, tem esta estrutura lógica:
 
 ```text
 .storage/chart-data/
@@ -141,12 +143,10 @@ O storage local/Railway tem esta estrutura:
 O PostgreSQL é a fonte de verdade para a versão ativa. A publicação aceita
 somente versões `ready` e, na mesma transação, desativa a versão anterior, ativa
 a nova e registra os timestamps. Os arquivos anteriores ficam intactos para
-rollback e clientes offline. No Railway, `.storage/chart-data` está no volume
-persistente, separado da imagem Docker. O Nginx mantém o serving estático das
-versões antigas; para novas versões encaminha o GET à API, que lê apenas os
-ranges necessários do PMTiles. O cache compartilhado de índices é limitado a
-64 entradas; descritores de arquivo são fechados após cada leitura. Não há
-cache do arquivo completo nem reconstrução de GeoJSON em runtime.
+rollback e clientes offline. No modo S3, o Nginx encaminha os tiles à API, que
+lê somente os ranges necessários do PMTiles no bucket privado. O cache
+compartilhado de índices e manifests é limitado a 64 entradas. Não há cache do
+arquivo completo nem reconstrução de GeoJSON em runtime.
 
 O NestJS consulta a versão `published` e `active` no banco e lê somente seu
 pequeno `manifest.json` para responder:
@@ -159,8 +159,8 @@ O TileJSON aponta para a versão ativa usando a URL compatível
 `/tiles/soundg/{version}/{z}/{x}/{y}.pbf`, com cache imutável de um ano.
 Tiles ausentes retornam 204; versões inexistentes continuam retornando erro
 não cacheável. `CHART_ASSET_BASE_URL` vale apenas para versões legadas em PBFs
-soltos; PMTiles usa a API atual. Distribuição direta por HTTP Range/CDN exigirá
-integração futura. A interface `ChartStorage` isola o acesso aos artefatos.
+soltos; PMTiles usa a API atual. A interface `ChartStorage` isola o acesso local
+e via bucket sem expor credenciais ao app.
 
 O gerador usa um spool binário sequencial, um temporário interno do empacotador
 e o arquivo final, não um arquivo por tile. A compactação gzip é sem perdas;
@@ -255,17 +255,16 @@ ser usada futuramente por pacotes offline e prefetch de rotas.
 ### Persistência e rastreabilidade
 
 As tabelas `chart_datasets`, `chart_ingestions` e `chart_versions` registram o
-dataset, ZIP de origem, SHA-256, células e updates, edição lida do DSID, estado,
-bounds, caminhos do manifesto e tiles, timestamps, erro e versão ativa. Os PBFs
-e ZIPs continuam no filesystem; metadados e publicação ficam no PostgreSQL.
+dataset, nome e SHA-256 do ZIP de origem, células e updates, edição lida do DSID,
+estado, bounds, chaves do manifesto e PMTiles, timestamps, erro e versão ativa.
+O ZIP não é retido. Metadados e publicação ficam no PostgreSQL; `manifest.json`
+e `tiles.pmtiles` ficam no Railway Bucket.
 
 ### Partes provisórias
 
-- a implementação de storage é o filesystem/volume do Railway; ainda não existe
-  adaptador S3/R2 nem CDN externa;
-- a fila é BullMQ/Redis, mas o consumidor ainda compartilha CPU/RAM/disco com a API;
-- o manifesto permanece como artefato no filesystem, enquanto sua localização,
-  versão e estado ficam registrados no PostgreSQL;
+- o processamento roda localmente e depende do Mac permanecer ativo até o fim;
+- a fila é BullMQ/Redis local, enquanto PostgreSQL e bucket são de produção;
+- a API da Railway é somente leitora das ENCs publicadas no bucket;
 - a política de retenção ainda não foi implementada; por isso nenhuma versão
   antiga é removida automaticamente.
 

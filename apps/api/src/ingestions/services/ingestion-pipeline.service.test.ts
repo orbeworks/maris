@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -135,4 +137,42 @@ test('run persists a processing failure without publishing it', async () => {
   await pipeline.run(JOB);
 
   assert.deepEqual(calls, ['processing', `failed:${JOB.ingestionId}`]);
+});
+
+test('removeSource removes only the expected local ingestion directory', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'maris-pipeline-unit-'));
+  const sourceDirectory = path.join(directory, 'ingestions', JOB.ingestionId);
+  const source = path.join(sourceDirectory, 'source.zip');
+  await mkdir(sourceDirectory, { recursive: true });
+  await writeFile(source, 'temporary source');
+  const pipeline = new IngestionPipelineService(
+    { getOrThrow: () => directory } as ConfigService,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  try {
+    await pipeline.removeSource({
+      ...JOB,
+      archivePath: `ingestions/${JOB.ingestionId}/source.zip`,
+    });
+    await assert.rejects(readFile(source), { code: 'ENOENT' });
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+test('removeSource refuses an unexpected path', async () => {
+  const pipeline = new IngestionPipelineService(
+    { getOrThrow: () => '/chart-storage' } as ConfigService,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(
+    pipeline.removeSource({ ...JOB, archivePath: '../source.zip' }),
+    /Refusing to remove unexpected ENC source path/,
+  );
 });

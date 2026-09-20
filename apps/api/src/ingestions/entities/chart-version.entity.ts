@@ -64,6 +64,12 @@ export class ChartVersion {
   @Column({ name: 'manifest_path', nullable: true, type: 'text' })
   manifestPath!: string | null;
 
+  @Column({ name: 'artifact_object_key', nullable: true, type: 'text' })
+  artifactObjectKey!: string | null;
+
+  @Column({ name: 'manifest_object_key', nullable: true, type: 'text' })
+  manifestObjectKey!: string | null;
+
   @Column({ default: false, type: 'boolean' })
   active!: boolean;
 

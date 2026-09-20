@@ -53,11 +53,11 @@ export class IngestionsService {
     const archivePath = path.join(ingestionDirectory, "source.zip");
 
     try {
+      this.dispatcher.ensureEnabled();
       this.validateUpload(file);
       await this.assertZipSignature(file.path);
       const archive = await this.archiveService.inspect(file.path);
       const checksum = await this.calculateChecksum(file.path);
-
       await mkdir(ingestionDirectory, { recursive: true });
       await rename(file.path, archivePath);
 

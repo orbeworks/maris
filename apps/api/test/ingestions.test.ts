@@ -157,7 +157,10 @@ test('valid upload is persisted and dispatches automatic processing', async () =
       }),
       findIngestion: async () => null,
     } as never,
-    { dispatch: (job: ProcessingJob) => dispatched.push(job) } as never,
+    {
+      dispatch: (job: ProcessingJob) => dispatched.push(job),
+      ensureEnabled: () => undefined,
+    } as never,
   );
 
   try {

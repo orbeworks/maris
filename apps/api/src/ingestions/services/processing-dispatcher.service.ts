@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue, Worker, UnrecoverableError } from 'bullmq';
 import type { ProcessingJob } from '../models/processing.js';
@@ -15,6 +15,7 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
   private worker?: Worker<ProcessingJob>;
   private timer?: NodeJS.Timeout;
   private reconciling = false;
+  private readonly enabled: boolean;
   private readonly connection;
   private readonly prefix: string;
 
@@ -24,6 +25,7 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
     @Inject(ProcessingCleanupService) private readonly cleanup: ProcessingCleanupService,
     @Inject(ConfigService) config: ConfigService,
   ) {
+    this.enabled = config.get<boolean>('ENC_PROCESSING_ENABLED', true) !== false;
     const url = new URL(config.getOrThrow<string>('REDIS_URL'));
     this.prefix = config.get<string>('ENC_QUEUE_PREFIX', 'maris');
     this.connection = {
@@ -45,6 +47,10 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
   }
 
   async onApplicationBootstrap() {
+    if (!this.enabled) {
+      this.logger.log('disabled by ENC_PROCESSING_ENABLED');
+      return;
+    }
     await this.cleanup.recoverOrphans();
     await this.queue.waitUntilReady();
     await this.queue.setGlobalConcurrency(1);
@@ -52,13 +58,23 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
     this.worker = new Worker<ProcessingJob>(ENC_QUEUE, async (job) => {
       try {
         await this.pipeline.run(job.data, true);
+        // A job is successful only after its local source has been removed.
+        // If cleanup fails, BullMQ retries and the already-published bucket
+        // artifacts make processing idempotent.
+        await this.pipeline.removeSource(job.data);
       } catch (error) {
         if (error instanceof Error && /ENOSPC|No SOUNDG layer found/.test(error.message)) throw new UnrecoverableError(error.message);
         throw error;
       }
     }, { prefix: this.prefix, connection: { ...this.connection, maxRetriesPerRequest: null }, concurrency: 1, maxStalledCount: 2 });
     this.worker.on('error', (error) => this.logger.error(`ENC worker: ${error.message}`));
-    this.worker.on('failed', (job, error) => this.logger.error(`ENC job ${job?.id}: ${error.message}`));
+    this.worker.on('failed', (job, error) => {
+      this.logger.error(`ENC job ${job?.id}: ${error.message}`);
+      const attempts = Number(job?.opts.attempts ?? 1);
+      if (job && (error instanceof UnrecoverableError || job.attemptsMade >= attempts)) {
+        void this.pipeline.removeSource(job.data).catch((cleanupError: Error) => this.logger.error(cleanupError.message));
+      }
+    });
     this.worker.on('completed', (job) => this.logger.log(`ENC job ${job.id} completed`));
     await this.worker.waitUntilReady();
     this.timer = setInterval(() => void this.reconcile().catch((error: Error) => this.logger.error(error.message)), 30_000);
@@ -66,6 +82,7 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
   }
 
   async dispatch(job: ProcessingJob) {
+    if (!this.enabled) return;
     try {
       // The ingestion is the idempotency boundary. A retry may reuse the same
       // source object, but must get a new BullMQ id after a previous failed job
@@ -75,6 +92,10 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap, OnAp
       // Preserve the persisted ingestion and ZIP; PostgreSQL reconciliation retries enqueueing.
       this.logger.error(`Enqueue pending for ${job.ingestionId}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  ensureEnabled() {
+    if (!this.enabled) throw new ServiceUnavailableException('ENC ingestion is disabled on this API instance');
   }
 
   private async reconcile() {

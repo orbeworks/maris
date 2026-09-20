@@ -26,7 +26,10 @@ class DatabaseLifecycle implements OnApplicationShutdown {
       provide: DataSource,
       useFactory: async (config: ConfigService) =>
         new DataSource(
-          createTypeOrmOptions(config.getOrThrow<string>('DATABASE_URL')),
+          createTypeOrmOptions(
+            config.getOrThrow<string>('DATABASE_URL'),
+            config.get<boolean>('DATABASE_MIGRATIONS_RUN', true),
+          ),
         ).initialize(),
     },
     DatabaseLifecycle,

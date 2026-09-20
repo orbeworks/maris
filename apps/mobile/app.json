@@ -10,7 +10,8 @@
     "ios": {
       "icon": "./assets/app-icon.png",
       "supportsTablet": true,
-      "bundleIdentifier": "com.maris.navigation"
+      "appleTeamId": "J728Z86KY5",
+      "bundleIdentifier": "com.orbeworks.maris"
     },
     "android": {
       "icon": "./assets/app-icon.png",
@@ -21,6 +22,7 @@
       "package": "com.maris.navigation"
     },
     "plugins": [
+      "./plugins/with-ios-app-variants",
       "@maplibre/maplibre-react-native",
       [
         "expo-location",

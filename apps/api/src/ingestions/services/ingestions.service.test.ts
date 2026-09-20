@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { UnprocessableEntityException } from '@nestjs/common';
+import {
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 
 import type { EncArchiveDto } from '../dtos/ingestion.dto.js';
@@ -78,7 +81,10 @@ test('create validates, persists and dispatches a valid ENC upload', async () =>
       },
       findIngestion: async () => null,
     } as never,
-    { dispatch: (job: unknown) => dispatched.push(job) } as never,
+    {
+      dispatch: (job: unknown) => dispatched.push(job),
+      ensureEnabled: () => undefined,
+    } as never,
   );
 
   try {
@@ -118,7 +124,7 @@ test('create rejects an invalid extension before inspecting the archive', async 
     config(directory),
     { inspect: async () => { inspected = true; } } as never,
     {} as never,
-    {} as never,
+    { ensureEnabled: () => undefined } as never,
   );
 
   try {
@@ -136,6 +142,32 @@ test('create rejects an invalid extension before inspecting the archive', async 
   }
 });
 
+test('create rejects a production upload and removes its temporary file', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'maris-ingestion-unit-'));
+  const temporaryFile = path.join(directory, 'upload.zip');
+  await writeFile(temporaryFile, Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+  const service = new IngestionsService(
+    config(directory),
+    { inspect: async () => ARCHIVE } as never,
+    {} as never,
+    {
+      ensureEnabled: () => {
+        throw new ServiceUnavailableException('ENC ingestion is disabled');
+      },
+    } as never,
+  );
+
+  try {
+    await assert.rejects(
+      service.create(upload(temporaryFile)),
+      ServiceUnavailableException,
+    );
+    await assert.rejects(readFile(temporaryFile), { code: 'ENOENT' });
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
 test('create rejects a file without a ZIP signature', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'maris-ingestion-unit-'));
   const temporaryFile = path.join(directory, 'upload.zip');
@@ -145,7 +177,7 @@ test('create rejects a file without a ZIP signature', async () => {
     config(directory),
     { inspect: async () => { inspected = true; } } as never,
     {} as never,
-    {} as never,
+    { ensureEnabled: () => undefined } as never,
   );
 
   try {
