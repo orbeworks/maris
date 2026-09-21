@@ -11,7 +11,8 @@
       "icon": "./assets/app-icon.png",
       "supportsTablet": true,
       "appleTeamId": "J728Z86KY5",
-      "bundleIdentifier": "com.orbeworks.maris"
+      "bundleIdentifier": "com.orbeworks.maris",
+      "buildNumber": "2"
     },
     "android": {
       "icon": "./assets/app-icon.png",
