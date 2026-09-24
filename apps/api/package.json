@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build:tiles": "tsx scripts/build-soundg-tiles.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "nest build",
     "migration:generate": "TS_NODE_TRANSPILE_ONLY=true typeorm-ts-node-esm -d src/database/data-source.ts migration:generate",
     "migration:run": "TS_NODE_TRANSPILE_ONLY=true typeorm-ts-node-esm -d src/database/data-source.ts migration:run",
     "migration:revert": "TS_NODE_TRANSPILE_ONLY=true typeorm-ts-node-esm -d src/database/data-source.ts migration:revert",
@@ -43,7 +43,10 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
+    "@nestjs/cli": "^12.0.6",
     "@nestjs/testing": "12.0.3",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.16.2",
     "@types/express": "^5.0.3",
     "@types/geojson-vt": "3.2.5",
     "@types/multer": "2.2.0",
