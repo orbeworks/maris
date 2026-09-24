@@ -434,17 +434,7 @@ export class GfsService {
   private async findCompleteInventory(
     forecastHours: number[],
   ): Promise<Inventory> {
-    this.logger.log(
-      `[GFS] discovering inventory forecastHours=${forecastHours.join(",")}`,
-    );
-
     const inventory = await this.discoverCompleteInventory(forecastHours);
-
-    this.logger.log(
-      `[GFS] inventory found run=${inventory.run.date}/${String(
-        inventory.run.cycle,
-      ).padStart(2, "0")} forecastHours=${forecastHours.join(",")}`,
-    );
 
     return inventory;
   }
