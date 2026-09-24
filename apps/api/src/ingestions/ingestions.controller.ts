@@ -14,6 +14,7 @@ import { FileInterceptor } from "@nestjs/platform-express";
 
 import type { IngestionDto, UploadEncDto } from "./dtos/ingestion.dto.js";
 import { IngestionsService } from "./services/ingestions.service.js";
+import { NoStore } from "../utils/http-cache.decorator.js";
 
 @Controller("ingestions")
 export class IngestionsController {
@@ -23,6 +24,7 @@ export class IngestionsController {
   ) {}
 
   @Post("enc")
+  @NoStore()
   @UseInterceptors(FileInterceptor("file"))
   async createEncIngestion(
     @UploadedFile() file?: UploadEncDto["file"],
@@ -35,6 +37,7 @@ export class IngestionsController {
   }
 
   @Get(":id")
+  @NoStore()
   async findIngestion(
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
   ): Promise<IngestionDto> {

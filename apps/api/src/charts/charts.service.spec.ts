@@ -96,6 +96,15 @@ test("endpoint returns exactly one chart from requested published version, with 
     assert.equal(Array.isArray(response.body), false);
     assert.deepEqual(response.body.dataQuality, [3]);
     assert.equal(response.body.surveys.length, 1);
+    assert.equal(
+      response.headers["cache-control"],
+      "public, s-maxage=86400, stale-while-revalidate=300",
+    );
+    assert.match(response.headers.etag, /^"[0-9a-f]{64}"$/);
+    await request(app.getHttpServer())
+      .get("/charts/at-point?lat=26&lon=-80&version=old-published")
+      .set("If-None-Match", response.headers.etag)
+      .expect(304);
     assert.deepEqual(where, {
       status: "published",
       dataset: { key: "soundg" },

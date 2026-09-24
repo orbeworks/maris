@@ -8,7 +8,7 @@ import { GfsService } from "./gfs.service.js";
 import { WeatherController } from "./weather.controller.js";
 import { decodeGfsTile } from "./gfs-tile-codec.js";
 
-const successCacheControl = "public, s-maxage=1800, stale-while-revalidate=300";
+const successCacheControl = "public, s-maxage=3600, stale-while-revalidate=300";
 
 function makeTestTile() {
   return {
@@ -71,11 +71,8 @@ test("GET /weather/gfs/tiles/:z/:x/:y returns a compressed deterministic tile", 
     "13",
     "6",
     "0",
-    { header: () => undefined } as never,
     response,
   );
-  assert.equal(headers.get("Cache-Control"), successCacheControl);
-  assert.match(headers.get("ETag") ?? "", /^"[0-9a-f]{64}"$/);
   assert.ok(body instanceof Buffer);
   const decoded = decodeGfsTile(gunzipSync(body));
   assert.deepEqual(decoded.fields.windU, [1, 2, 3, 4]);
@@ -112,13 +109,11 @@ test("current GFS tile is fetched directly from the GFS service", async () => {
     "13",
     "6",
     "0",
-    { header: () => undefined } as never,
     response,
   );
 
   assert.equal(sourceTileCalls, 1);
   assert.equal(decodeGfsTile(gunzipSync(body)).header.forecastHour, 0);
-  assert.match(headers.get("ETag") ?? "", /^"[0-9a-f]{64}"$/);
 });
 
 test("GFS tiles return 304 for a matching ETag without a body", async () => {
@@ -145,8 +140,7 @@ test("GFS tiles return 304 for a matching ETag without a body", async () => {
       .expect(304);
     assert.equal(second.headers.etag, first.headers.etag);
     assert.equal(second.headers["cache-control"], successCacheControl);
-    assert.equal(second.headers["content-type"], "application/octet-stream");
-    assert.equal(second.body.length, 0);
+    assert.equal(second.text, "");
   } finally {
     await app.close();
   }

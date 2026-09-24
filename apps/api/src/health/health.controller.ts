@@ -1,11 +1,13 @@
 import { Controller, Get } from "@nestjs/common";
 import { DataSource } from "typeorm";
+import { NoStore } from "../utils/http-cache.decorator.js";
 
 @Controller("health")
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
 
   @Get()
+  @NoStore()
   async getHealth() {
     let database = "up";
     try {
