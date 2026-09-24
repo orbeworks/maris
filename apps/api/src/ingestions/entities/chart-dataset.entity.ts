@@ -5,30 +5,30 @@ import {
   OneToMany,
   PrimaryColumn,
   UpdateDateColumn,
-} from 'typeorm';
-import type { Relation } from 'typeorm';
+} from "typeorm";
+import type { Relation } from "typeorm";
 
-import { ChartIngestion } from './chart-ingestion.entity.js';
-import { ChartVersion } from './chart-version.entity.js';
+import { ChartIngestion } from "./chart-ingestion.entity.js";
+import { ChartVersion } from "./chart-version.entity.js";
 
-@Entity({ name: 'chart_datasets' })
+@Entity({ name: "chart_datasets" })
 export class ChartDataset {
-  @PrimaryColumn('uuid')
+  @PrimaryColumn("uuid")
   id!: string;
 
-  @Column({ type: 'text', unique: true })
+  @Column({ type: "text", unique: true })
   key!: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: "text" })
   name!: string;
 
-  @Column({ default: 0, type: 'bigint' })
+  @Column({ default: 0, type: "bigint" })
   revision!: string;
 
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt!: Date;
 
   @OneToMany(() => ChartIngestion, (ingestion) => ingestion.dataset)

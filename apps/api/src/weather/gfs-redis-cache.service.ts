@@ -95,9 +95,13 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
       const value = await this.redis.get(ACTIVE_RUN_KEY);
       if (!value) return null;
       const parsed = JSON.parse(value) as ActiveGfsRun;
-      return parsed.status === "READY" && typeof parsed.run === "string" ? parsed : null;
+      return parsed.status === "READY" && typeof parsed.run === "string"
+        ? parsed
+        : null;
     } catch (error) {
-      this.logger.warn(`[GFS Redis] active-run GET failed: ${this.message(error)}`);
+      this.logger.warn(
+        `[GFS Redis] active-run GET failed: ${this.message(error)}`,
+      );
       return null;
     }
   }
@@ -113,7 +117,9 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
       );
       return true;
     } catch (error) {
-      this.logger.warn(`[GFS Redis] active-run publish failed: ${this.message(error)}`);
+      this.logger.warn(
+        `[GFS Redis] active-run publish failed: ${this.message(error)}`,
+      );
       return false;
     }
   }
@@ -121,9 +127,13 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
   async acquireLock(token: string, ttlMs: number) {
     try {
       await this.ensureConnected();
-      return (await this.redis.set(LOCK_KEY, token, "PX", ttlMs, "NX")) === "OK";
+      return (
+        (await this.redis.set(LOCK_KEY, token, "PX", ttlMs, "NX")) === "OK"
+      );
     } catch (error) {
-      this.logger.warn(`[GFS Redis] lock acquire failed: ${this.message(error)}`);
+      this.logger.warn(
+        `[GFS Redis] lock acquire failed: ${this.message(error)}`,
+      );
       return false;
     }
   }
@@ -131,13 +141,15 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
   async renewLock(token: string, ttlMs: number) {
     try {
       await this.ensureConnected();
-      return (await this.redis.eval(
-        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end",
-        1,
-        LOCK_KEY,
-        token,
-        String(ttlMs),
-      )) === 1;
+      return (
+        (await this.redis.eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('pexpire', KEYS[1], ARGV[2]) else return 0 end",
+          1,
+          LOCK_KEY,
+          token,
+          String(ttlMs),
+        )) === 1
+      );
     } catch {
       return false;
     }
@@ -148,7 +160,9 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
       await this.ensureConnected();
       await this.redis.eval(RELEASE_LOCK_SCRIPT, 1, LOCK_KEY, token);
     } catch (error) {
-      this.logger.warn(`[GFS Redis] lock release failed: ${this.message(error)}`);
+      this.logger.warn(
+        `[GFS Redis] lock release failed: ${this.message(error)}`,
+      );
     }
   }
 
@@ -157,7 +171,8 @@ export class GfsRedisCacheService implements OnApplicationShutdown {
   }
 
   async onApplicationShutdown() {
-    if (this.redis.status !== "end") await this.redis.quit().catch(() => undefined);
+    if (this.redis.status !== "end")
+      await this.redis.quit().catch(() => undefined);
   }
 
   private tileKey(

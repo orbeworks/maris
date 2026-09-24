@@ -19,15 +19,17 @@ function serviceWithTtl(
 }
 
 function inventoryHtml(hours: number[] = [0]) {
-  const files = hours.map((hour) =>
-    `<option value="gfs.t00z.pgrb2.0p25.f${String(hour).padStart(3, "0")}">`,
+  const files = hours.map(
+    (hour) =>
+      `<option value="gfs.t00z.pgrb2.0p25.f${String(hour).padStart(3, "0")}">`,
   );
   return files.join("\n");
 }
 
 async function lookup(service: GfsService, hours: number[]) {
-  return (service as unknown as { findCompleteInventory: InventoryLookup })
-    .findCompleteInventory(hours);
+  return (
+    service as unknown as { findCompleteInventory: InventoryLookup }
+  ).findCompleteInventory(hours);
 }
 
 test("first run lookup misses, stores, and the next tile lookup hits memory", async () => {
@@ -36,7 +38,11 @@ test("first run lookup misses, stores, and the next tile lookup hits memory", as
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    return { ok: true, status: 200, text: async () => inventoryHtml() } as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
   };
   try {
     const first = await lookup(service, [0]);
@@ -54,7 +60,11 @@ test("multiple forecast-hour requests reuse a cached run when its files support 
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    return { ok: true, status: 200, text: async () => inventoryHtml([0, 3]) } as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml([0, 3]),
+    } as Response;
   };
   try {
     await lookup(service, [0]);
@@ -71,7 +81,11 @@ test("expired run cache performs a new inventory lookup", async () => {
   let calls = 0;
   globalThis.fetch = async () => {
     calls += 1;
-    return { ok: true, status: 200, text: async () => inventoryHtml() } as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
   };
   try {
     await lookup(service, [0]);
@@ -110,7 +124,11 @@ test("an unavailable latest run is skipped and an older run can be used", async 
     if (calls === 1) {
       return { ok: false, status: 500, text: async () => "" } as Response;
     }
-    return { ok: true, status: 200, text: async () => inventoryHtml() } as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
   };
   try {
     const inventory = await lookup(service, [0]);
@@ -154,8 +172,12 @@ test("a cached valid run remains available and is not replaced by an invalid loo
   globalThis.fetch = async () => {
     calls += 1;
     return valid
-      ? { ok: true, status: 200, text: async () => inventoryHtml([0]) } as Response
-      : { ok: false, status: 500, text: async () => "" } as Response;
+      ? ({
+          ok: true,
+          status: 200,
+          text: async () => inventoryHtml([0]),
+        } as Response)
+      : ({ ok: false, status: 500, text: async () => "" } as Response);
   };
   try {
     const first = await lookup(service, [0]);
@@ -175,7 +197,11 @@ test("concurrent cache misses share one run discovery", async () => {
   globalThis.fetch = async () => {
     calls += 1;
     await new Promise((resolve) => setTimeout(resolve, 20));
-    return { ok: true, status: 200, text: async () => inventoryHtml() } as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
   };
   try {
     const results = await Promise.all(
@@ -214,25 +240,43 @@ test("a failed single-flight discovery is shared and cleared for a later retry",
 
 test("run candidates never include a future cycle", () => {
   const service = serviceWithTtl();
-  const candidates = (service as unknown as {
-    candidateRuns: (now: Date) => Array<{ dateText: string; cycle: number }>;
-  }).candidateRuns;
+  const candidates = (
+    service as unknown as {
+      candidateRuns: (now: Date) => Array<{ dateText: string; cycle: number }>;
+    }
+  ).candidateRuns;
 
-  const keys = (now: string) => candidates(new Date(now))
-    .slice(0, 4)
-    .map(({ dateText, cycle }) => `${dateText}/${String(cycle).padStart(2, "0")}`);
+  const keys = (now: string) =>
+    candidates(new Date(now))
+      .slice(0, 4)
+      .map(
+        ({ dateText, cycle }) =>
+          `${dateText}/${String(cycle).padStart(2, "0")}`,
+      );
 
   assert.deepEqual(keys("2026-09-19T07:10:00Z"), [
-    "20260919/06", "20260919/00", "20260918/18", "20260918/12",
+    "20260919/06",
+    "20260919/00",
+    "20260918/18",
+    "20260918/12",
   ]);
   assert.deepEqual(keys("2026-09-19T12:00:00Z"), [
-    "20260919/12", "20260919/06", "20260919/00", "20260918/18",
+    "20260919/12",
+    "20260919/06",
+    "20260919/00",
+    "20260918/18",
   ]);
   assert.deepEqual(keys("2026-09-19T05:59:59Z"), [
-    "20260919/00", "20260918/18", "20260918/12", "20260918/06",
+    "20260919/00",
+    "20260918/18",
+    "20260918/12",
+    "20260918/06",
   ]);
   assert.deepEqual(keys("2026-09-19T00:00:00Z"), [
-    "20260919/00", "20260918/18", "20260918/12", "20260918/06",
+    "20260919/00",
+    "20260918/18",
+    "20260918/12",
+    "20260918/06",
   ]);
 });
 
@@ -254,8 +298,11 @@ test("current forecast resolves hour zero to the closest UTC valid time", async 
       "gfs.t18z.pgrb2.0p25.f005",
     ]),
   };
-  (service as unknown as { findCompleteInventory: () => Promise<typeof inventory> })
-    .findCompleteInventory = async () => inventory;
+  (
+    service as unknown as {
+      findCompleteInventory: () => Promise<typeof inventory>;
+    }
+  ).findCompleteInventory = async () => inventory;
 
   const current = await service.getCurrentForecast(
     new Date("2026-09-20T19:18:00-03:00"),
@@ -274,13 +321,13 @@ test("current forecast breaks an exact tie toward the earlier valid time", async
       runAt: "2026-09-20T18:00:00.000Z",
       baseUrl: "https://example.test/gfs.20260920/18/atmos",
     },
-    files: new Set([
-      "gfs.t18z.pgrb2.0p25.f004",
-      "gfs.t18z.pgrb2.0p25.f005",
-    ]),
+    files: new Set(["gfs.t18z.pgrb2.0p25.f004", "gfs.t18z.pgrb2.0p25.f005"]),
   };
-  (service as unknown as { findCompleteInventory: () => Promise<typeof inventory> })
-    .findCompleteInventory = async () => inventory;
+  (
+    service as unknown as {
+      findCompleteInventory: () => Promise<typeof inventory>;
+    }
+  ).findCompleteInventory = async () => inventory;
 
   const current = await service.getCurrentForecast(
     new Date("2026-09-20T22:30:00.000Z"),

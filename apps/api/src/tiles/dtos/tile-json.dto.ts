@@ -1,8 +1,8 @@
 export class TileJsonDto {
-  tilejson!: '3.0.0';
+  tilejson!: "3.0.0";
   name!: string;
   version!: string;
-  scheme!: 'xyz';
+  scheme!: "xyz";
   tiles!: string[];
   minzoom!: number;
   maxzoom!: number;

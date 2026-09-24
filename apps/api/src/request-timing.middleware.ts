@@ -9,7 +9,8 @@ export class RequestTimingMiddleware implements NestMiddleware {
     const startedAt = process.hrtime.bigint();
 
     response.once("finish", () => {
-      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      const durationMs =
+        Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       const path = request.originalUrl.split("?", 1)[0];
       this.logger.log(
         `${request.method} ${path} ${response.statusCode} ${Math.round(durationMs)}ms`,

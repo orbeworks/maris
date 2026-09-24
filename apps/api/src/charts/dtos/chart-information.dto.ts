@@ -13,7 +13,13 @@ export type ChartInformationDto = {
   soundingDatum: number | null;
   verticalDatum: number | null;
   dataQuality: number[];
-  surveys: { objectClass: string; source: string | null; date: string | null; startedAt: string | null; endedAt: string | null }[];
+  surveys: {
+    objectClass: string;
+    source: string | null;
+    date: string | null;
+    startedAt: string | null;
+    endedAt: string | null;
+  }[];
   version: string;
   processedAt: string | null;
   publishedAt: string | null;

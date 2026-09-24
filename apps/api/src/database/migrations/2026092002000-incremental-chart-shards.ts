@@ -1,7 +1,7 @@
-import type { MigrationInterface, QueryRunner } from 'typeorm';
+import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class IncrementalChartShards2026092002000 implements MigrationInterface {
-  name = 'IncrementalChartShards2026092002000';
+  name = "IncrementalChartShards2026092002000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -43,10 +43,14 @@ export class IncrementalChartShards2026092002000 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS chart_cells_shard_index');
-    await queryRunner.query('ALTER TABLE chart_cells DROP COLUMN IF EXISTS shard_id');
-    await queryRunner.query('DROP TABLE IF EXISTS chart_shards');
-    await queryRunner.query('ALTER TABLE chart_datasets DROP COLUMN IF EXISTS revision');
+    await queryRunner.query("DROP INDEX IF EXISTS chart_cells_shard_index");
+    await queryRunner.query(
+      "ALTER TABLE chart_cells DROP COLUMN IF EXISTS shard_id",
+    );
+    await queryRunner.query("DROP TABLE IF EXISTS chart_shards");
+    await queryRunner.query(
+      "ALTER TABLE chart_datasets DROP COLUMN IF EXISTS revision",
+    );
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS chart_versions_one_active_per_dataset
       ON chart_versions(dataset_id) WHERE active

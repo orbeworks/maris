@@ -1,10 +1,10 @@
 export const INGESTION_STATUSES = [
-  'received',
-  'validating',
-  'processing',
-  'ready',
-  'failed',
-  'published',
+  "received",
+  "validating",
+  "processing",
+  "ready",
+  "failed",
+  "published",
 ] as const;
 
 export type IngestionStatus = (typeof INGESTION_STATUSES)[number];
@@ -18,12 +18,22 @@ export type ProcessedCell = {
   metadata?: EncCellMetadata;
 };
 
-export type EncJsonValue = string | number | boolean | null | EncJsonValue[] | { [key: string]: EncJsonValue };
+export type EncJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | EncJsonValue[]
+  | { [key: string]: EncJsonValue };
 
 export type EncMetadataFeature = {
-  type: 'Feature';
+  type: "Feature";
   properties: Record<string, EncJsonValue>;
-  geometry: { type: string; coordinates?: EncJsonValue; geometries?: EncJsonValue[] } | null;
+  geometry: {
+    type: string;
+    coordinates?: EncJsonValue;
+    geometries?: EncJsonValue[];
+  } | null;
 };
 
 export type EncCellMetadata = {

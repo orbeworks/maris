@@ -14,10 +14,7 @@ import {
   gfsCurrentRunId,
   gfsRunId,
 } from "./gfs-redis-cache.service.js";
-import {
-  GFS_MAX_WEATHER_ZOOM,
-  xyzTileCount,
-} from "./gfs-xyz.js";
+import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./gfs-xyz.js";
 
 type PrefetchTask = { z: number; x: number; y: number; forecastHour: number };
 const GFS_ZOOMS = Array.from({ length: GFS_MAX_WEATHER_ZOOM + 1 }, (_, z) => z);
@@ -48,7 +45,12 @@ export class GfsPrefetchService
     private readonly redis: GfsRedisCacheService,
   ) {
     this.enabled = config.get<boolean>("GFS_PREFETCH_ENABLED", true) !== false;
-    this.concurrency = this.int(config.get<number>("GFS_PREFETCH_CONCURRENCY", 6), 6, 1, 16);
+    this.concurrency = this.int(
+      config.get<number>("GFS_PREFETCH_CONCURRENCY", 6),
+      6,
+      1,
+      16,
+    );
     this.refreshIntervalMs = this.int(
       config.get<number>("GFS_PREFETCH_REFRESH_INTERVAL_MS", 900_000),
       900_000,
@@ -82,7 +84,10 @@ export class GfsPrefetchService
     }
     // Never block API boot on global population.
     setTimeout(() => void this.runCycle(), 0).unref();
-    this.timer = setInterval(() => void this.runCycle(), this.refreshIntervalMs);
+    this.timer = setInterval(
+      () => void this.runCycle(),
+      this.refreshIntervalMs,
+    );
     this.timer.unref();
   }
 
@@ -95,7 +100,9 @@ export class GfsPrefetchService
     try {
       locked = await this.redis.acquireLock(token, this.lockTtlMs);
       if (!locked) {
-        this.logger.log("lock busy or Redis unavailable; API fallback remains active");
+        this.logger.log(
+          "lock busy or Redis unavailable; API fallback remains active",
+        );
         return;
       }
       this.lockRenewal = setInterval(
@@ -104,15 +111,22 @@ export class GfsPrefetchService
       );
       this.lockRenewal.unref();
 
-      const currentOnly = this.forecastHours.length === 1 && this.forecastHours[0] === 0;
-      const current = currentOnly ? await this.gfs.getCurrentForecast() : undefined;
-      const inventory = current?.inventory ??
-        await this.gfs.getCompleteInventory(this.forecastHours);
+      const currentOnly =
+        this.forecastHours.length === 1 && this.forecastHours[0] === 0;
+      const current = currentOnly
+        ? await this.gfs.getCurrentForecast()
+        : undefined;
+      const inventory =
+        current?.inventory ??
+        (await this.gfs.getCompleteInventory(this.forecastHours));
       const run = current
         ? gfsCurrentRunId(inventory.run.runAt, current.sourceForecastHour)
         : gfsRunId(inventory.run.runAt);
       const tasks = this.tasks();
-      const sourceCache = new Map<string, Awaited<ReturnType<GfsService["getTileFromInventory"]>>>();
+      const sourceCache = new Map<
+        string,
+        Awaited<ReturnType<GfsService["getTileFromInventory"]>>
+      >();
       const estimatedRedisBytes = await this.estimateRedisBytes(
         inventory,
         tasks.length,
@@ -142,9 +156,19 @@ export class GfsPrefetchService
           let stored = false;
           let taskCached = false;
           let taskBytes = 0;
-          for (let attempt = 0; attempt < RETRY_DELAYS_MS.length && !this.stopping; attempt += 1) {
+          for (
+            let attempt = 0;
+            attempt < RETRY_DELAYS_MS.length && !this.stopping;
+            attempt += 1
+          ) {
             try {
-              const existing = await this.redis.getTile(run, task.forecastHour, task.x, task.y, task.z);
+              const existing = await this.redis.getTile(
+                run,
+                task.forecastHour,
+                task.x,
+                task.y,
+                task.z,
+              );
               if (existing) {
                 taskCached = true;
                 taskBytes = existing.byteLength;
@@ -160,10 +184,19 @@ export class GfsPrefetchService
                 current?.sourceForecastHour ?? task.forecastHour,
                 sourceCache,
               );
-              const body = gzipSync(encodeGfsTile(
-                current ? { ...grid, forecastHour: 0 } : grid,
-              ));
-              if (!(await this.redis.setTile(run, task.forecastHour, task.x, task.y, body, task.z))) {
+              const body = gzipSync(
+                encodeGfsTile(current ? { ...grid, forecastHour: 0 } : grid),
+              );
+              if (
+                !(await this.redis.setTile(
+                  run,
+                  task.forecastHour,
+                  task.x,
+                  task.y,
+                  body,
+                  task.z,
+                ))
+              ) {
                 throw new Error("Redis SET failed");
               }
               taskBytes = body.byteLength;
@@ -196,9 +229,15 @@ export class GfsPrefetchService
           }
         }
       };
-      await Promise.all(Array.from({ length: this.concurrency }, () => processTask()));
+      await Promise.all(
+        Array.from({ length: this.concurrency }, () => processTask()),
+      );
 
-      if (!this.stopping && failed === 0 && cacheHits + cacheMisses === totalKeys) {
+      if (
+        !this.stopping &&
+        failed === 0 &&
+        cacheHits + cacheMisses === totalKeys
+      ) {
         await this.redis.publishActiveRun(run);
         this.logger.log(`run=${run} READY active-run published`);
       } else {
@@ -224,7 +263,8 @@ export class GfsPrefetchService
       for (const z of GFS_ZOOMS) {
         const count = xyzTileCount(z);
         for (let y = 0; y < count; y += 1) {
-          for (let x = 0; x < count; x += 1) tasks.push({ z, x, y, forecastHour });
+          for (let x = 0; x < count; x += 1)
+            tasks.push({ z, x, y, forecastHour });
         }
       }
     }
@@ -234,7 +274,10 @@ export class GfsPrefetchService
   private async estimateRedisBytes(
     inventory: Awaited<ReturnType<GfsService["getCompleteInventory"]>>,
     taskCount: number,
-    sourceCache: Map<string, Awaited<ReturnType<GfsService["getTileFromInventory"]>>>,
+    sourceCache: Map<
+      string,
+      Awaited<ReturnType<GfsService["getTileFromInventory"]>>
+    >,
     run: string,
     currentSourceForecastHour?: number,
   ) {
@@ -255,11 +298,13 @@ export class GfsPrefetchService
             currentSourceForecastHour ?? forecastHour,
             sourceCache,
           );
-          totalSampleBytes += gzipSync(encodeGfsTile(
-            currentSourceForecastHour === undefined
-              ? grid
-              : { ...grid, forecastHour: 0 },
-          )).byteLength;
+          totalSampleBytes += gzipSync(
+            encodeGfsTile(
+              currentSourceForecastHour === undefined
+                ? grid
+                : { ...grid, forecastHour: 0 },
+            ),
+          ).byteLength;
         }
         samples.push(totalSampleBytes);
       } catch (error) {
@@ -269,7 +314,10 @@ export class GfsPrefetchService
       }
     }
     if (samples.length === 0) return Number.POSITIVE_INFINITY;
-    const average = samples.reduce((sum, value) => sum + value, 0) / samples.length / GFS_ZOOMS.length;
+    const average =
+      samples.reduce((sum, value) => sum + value, 0) /
+      samples.length /
+      GFS_ZOOMS.length;
     // Include a conservative allowance for Redis key/value/object overhead.
     const estimate = Math.ceil(average * taskCount * 1.25);
     this.estimatedRun = run;
@@ -293,8 +341,16 @@ export class GfsPrefetchService
     await new Promise((resolve) => setTimeout(resolve, jitter));
   }
 
-  private int(value: number | undefined, fallback: number, min: number, max: number) {
-    return Number.isInteger(value) && value !== undefined && value >= min && value <= max
+  private int(
+    value: number | undefined,
+    fallback: number,
+    min: number,
+    max: number,
+  ) {
+    return Number.isInteger(value) &&
+      value !== undefined &&
+      value >= min &&
+      value <= max
       ? value
       : fallback;
   }
@@ -307,6 +363,7 @@ export class GfsPrefetchService
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     if (this.lockRenewal) clearInterval(this.lockRenewal);
-    while (this.running) await new Promise((resolve) => setTimeout(resolve, 25));
+    while (this.running)
+      await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }

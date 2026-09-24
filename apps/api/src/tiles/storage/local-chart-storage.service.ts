@@ -1,16 +1,16 @@
-import { open, readFile } from 'node:fs/promises';
-import { PMTiles, SharedPromiseCache } from 'pmtiles';
-import path from 'node:path';
+import { open, readFile } from "node:fs/promises";
+import { PMTiles, SharedPromiseCache } from "pmtiles";
+import path from "node:path";
 
 import {
   Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
-import type { ChartStorage, TilesetManifest } from './chart-storage.js';
+import type { ChartStorage, TilesetManifest } from "./chart-storage.js";
 
 const SAFE_SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
@@ -22,12 +22,11 @@ export class LocalChartStorageService implements ChartStorage {
 
   constructor(@Inject(ConfigService) config: ConfigService) {
     this.storageDirectory = path.resolve(
-      config.getOrThrow<string>('CHART_STORAGE_DIR'),
+      config.getOrThrow<string>("CHART_STORAGE_DIR"),
     );
-    this.publicBaseUrl = config.get<string>('CHART_ASSET_BASE_URL')?.replace(
-      /\/$/,
-      '',
-    );
+    this.publicBaseUrl = config
+      .get<string>("CHART_ASSET_BASE_URL")
+      ?.replace(/\/$/, "");
   }
 
   async getManifest(
@@ -42,23 +41,20 @@ export class LocalChartStorageService implements ChartStorage {
         path.join(
           this.storageDirectory,
           dataset,
-          'versions',
+          "versions",
           version,
-          'manifest.json',
+          "manifest.json",
         ),
       );
 
-      if (
-        manifest.dataset !== dataset ||
-        manifest.version !== version
-      ) {
+      if (manifest.dataset !== dataset || manifest.version !== version) {
         throw new InternalServerErrorException(
           `Invalid manifest for ${dataset}/${version}`,
         );
       }
       return manifest;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new NotFoundException(`No published dataset named ${dataset}`);
       }
       throw error;
@@ -66,7 +62,7 @@ export class LocalChartStorageService implements ChartStorage {
   }
 
   getTileUrl(manifest: TilesetManifest, fallbackBaseUrl: string): string {
-    if (this.publicBaseUrl && manifest.storageFormat !== 'pmtiles') {
+    if (this.publicBaseUrl && manifest.storageFormat !== "pmtiles") {
       return `${this.publicBaseUrl}/${manifest.tilePathTemplate}`;
     }
 
@@ -74,43 +70,69 @@ export class LocalChartStorageService implements ChartStorage {
     return `${fallbackBaseUrl}/tiles/${manifest.dataset}/${manifest.version}/{z}/{x}/{y}.pbf`;
   }
 
-  async getTile(dataset: string, version: string, z: number, x: number, y: number): Promise<Buffer | undefined> {
+  async getTile(
+    dataset: string,
+    version: string,
+    z: number,
+    x: number,
+    y: number,
+  ): Promise<Buffer | undefined> {
     const manifest = await this.getManifest(dataset, version);
     if (z < manifest.minzoom || z > manifest.maxzoom) return undefined;
-    const directory = path.join(this.storageDirectory, dataset, 'versions', version);
-    if (manifest.storageFormat !== 'pmtiles') {
-      try { return await readFile(path.join(directory, String(z), String(x), `${y}.pbf`)); }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    const directory = path.join(
+      this.storageDirectory,
+      dataset,
+      "versions",
+      version,
+    );
+    if (manifest.storageFormat !== "pmtiles") {
+      try {
+        return await readFile(
+          path.join(directory, String(z), String(x), `${y}.pbf`),
+        );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          return undefined;
         throw error;
       }
     }
-    const archive = path.join(directory, 'tiles.pmtiles');
-    const reader = new PMTiles({
-      getKey: () => archive,
-      getBytes: async (offset, length) => {
-        if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length < 0 || length > 32 * 1024 * 1024) {
-          throw new Error('Invalid PMTiles byte range');
-        }
-        const handle = await open(archive, 'r');
-        try {
-          const buffer = new Uint8Array(length);
-          const { bytesRead } = await handle.read(buffer, 0, length, offset);
-          return { data: buffer.slice(0, bytesRead).buffer };
-        } finally { await handle.close(); }
+    const archive = path.join(directory, "tiles.pmtiles");
+    const reader = new PMTiles(
+      {
+        getKey: () => archive,
+        getBytes: async (offset, length) => {
+          if (
+            !Number.isSafeInteger(offset) ||
+            offset < 0 ||
+            !Number.isSafeInteger(length) ||
+            length < 0 ||
+            length > 32 * 1024 * 1024
+          ) {
+            throw new Error("Invalid PMTiles byte range");
+          }
+          const handle = await open(archive, "r");
+          try {
+            const buffer = new Uint8Array(length);
+            const { bytesRead } = await handle.read(buffer, 0, length, offset);
+            return { data: buffer.slice(0, bytesRead).buffer };
+          } finally {
+            await handle.close();
+          }
+        },
       },
-    }, this.archiveCache);
+      this.archiveCache,
+    );
     const tile = await reader.getZxy(z, x, y);
     return tile ? Buffer.from(tile.data) : undefined;
   }
 
   private async readJson<T>(filePath: string): Promise<T> {
-    return JSON.parse(await readFile(filePath, 'utf8')) as T;
+    return JSON.parse(await readFile(filePath, "utf8")) as T;
   }
 
   private assertSafeSegment(value: string) {
     if (!SAFE_SEGMENT.test(value)) {
-      throw new InternalServerErrorException('Invalid chart storage key');
+      throw new InternalServerErrorException("Invalid chart storage key");
     }
   }
 }

@@ -14,7 +14,11 @@ export function normalizeX(x: number, z: number) {
   return ((x % n) + n) % n;
 }
 
-export function webMercatorTileBounds(z: number, x: number, y: number): GfsBounds {
+export function webMercatorTileBounds(
+  z: number,
+  x: number,
+  y: number,
+): GfsBounds {
   const n = xyzTileCount(z);
   const west = (x / n) * 360 - 180;
   const east = ((x + 1) / n) * 360 - 180;
@@ -23,14 +27,27 @@ export function webMercatorTileBounds(z: number, x: number, y: number): GfsBound
   return { west, east, north: latitude(y), south: latitude(y + 1) };
 }
 
-export function xyzTileForCoordinate(longitude: number, latitude: number, z: number) {
+export function xyzTileForCoordinate(
+  longitude: number,
+  latitude: number,
+  z: number,
+) {
   const n = xyzTileCount(z);
   const lon = ((((longitude + 180) % 360) + 360) % 360) - 180;
-  const lat = Math.max(-WEB_MERCATOR_MAX_LATITUDE, Math.min(WEB_MERCATOR_MAX_LATITUDE, latitude));
+  const lat = Math.max(
+    -WEB_MERCATOR_MAX_LATITUDE,
+    Math.min(WEB_MERCATOR_MAX_LATITUDE, latitude),
+  );
   const phi = (lat * Math.PI) / 180;
   return {
     z,
     x: Math.floor(((lon + 180) / 360) * n),
-    y: Math.max(0, Math.min(n - 1, Math.floor(((1 - Math.asinh(Math.tan(phi)) / Math.PI) / 2) * n))),
+    y: Math.max(
+      0,
+      Math.min(
+        n - 1,
+        Math.floor(((1 - Math.asinh(Math.tan(phi)) / Math.PI) / 2) * n),
+      ),
+    ),
   };
 }

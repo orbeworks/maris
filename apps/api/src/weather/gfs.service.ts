@@ -16,11 +16,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-import {
-  type GfsBounds,
-  type GfsGrid,
-  type GfsRun,
-} from "./gfs.types.js";
+import { type GfsBounds, type GfsGrid, type GfsRun } from "./gfs.types.js";
 import { gfsTileBounds, gfsTileFromCoordinate } from "./gfs-tiles.js";
 import {
   GFS_MAX_WEATHER_ZOOM,
@@ -82,22 +78,57 @@ function sampleGridField(
   longitude: number,
 ) {
   const values = grid.fields[field];
-  if (!values || values.length !== grid.width * grid.height) return null;
+  if (values?.length !== grid.width * grid.height) return null;
   const { west, east, north, south } = grid.bounds;
-  if (latitude < south || latitude > north || longitude < west || longitude > east) return null;
-  const x = Math.max(0, Math.min(grid.width - 1, ((longitude - west) / (east - west)) * (grid.width - 1)));
-  const y = Math.max(0, Math.min(grid.height - 1, ((north - latitude) / (north - south)) * (grid.height - 1)));
+  if (
+    latitude < south ||
+    latitude > north ||
+    longitude < west ||
+    longitude > east
+  )
+    return null;
+  const x = Math.max(
+    0,
+    Math.min(
+      grid.width - 1,
+      ((longitude - west) / (east - west)) * (grid.width - 1),
+    ),
+  );
+  const y = Math.max(
+    0,
+    Math.min(
+      grid.height - 1,
+      ((north - latitude) / (north - south)) * (grid.height - 1),
+    ),
+  );
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const x1 = Math.min(grid.width - 1, x0 + 1);
   const y1 = Math.min(grid.height - 1, y0 + 1);
   const tx = x - x0;
   const ty = y - y0;
-  const valuesAt = (row: number, column: number) => values[row * grid.width + column];
-  const corners = [valuesAt(y0, x0), valuesAt(y0, x1), valuesAt(y1, x0), valuesAt(y1, x1)];
-  const valid = corners.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  if (valid.length !== corners.length) return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
-  return corners[0]! * (1 - tx) * (1 - ty) + corners[1]! * tx * (1 - ty) + corners[2]! * (1 - tx) * ty + corners[3]! * tx * ty;
+  const valuesAt = (row: number, column: number) =>
+    values[row * grid.width + column];
+  const corners = [
+    valuesAt(y0, x0),
+    valuesAt(y0, x1),
+    valuesAt(y1, x0),
+    valuesAt(y1, x1),
+  ];
+  const valid = corners.filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isFinite(value),
+  );
+  if (valid.length !== corners.length)
+    return valid.length
+      ? valid.reduce((sum, value) => sum + value, 0) / valid.length
+      : null;
+  return (
+    corners[0]! * (1 - tx) * (1 - ty) +
+    corners[1]! * tx * (1 - ty) +
+    corners[2]! * (1 - tx) * ty +
+    corners[3]! * tx * ty
+  );
 }
 
 @Injectable()
@@ -136,20 +167,28 @@ export class GfsService {
   }
 
   async getCompleteInventory(forecastHours: number[]): Promise<Inventory> {
-    return this.findCompleteInventory(this.normalizeForecastHours(forecastHours));
+    return this.findCompleteInventory(
+      this.normalizeForecastHours(forecastHours),
+    );
   }
 
   async getCurrentForecast(now = new Date()): Promise<CurrentGfsForecast> {
     const inventory = await this.findCompleteInventory([0]);
     const runAtMs = Date.parse(inventory.run.runAt);
     if (!Number.isFinite(runAtMs)) {
-      throw new ServiceUnavailableException("GFS run has an invalid initialization time");
+      throw new ServiceUnavailableException(
+        "GFS run has an invalid initialization time",
+      );
     }
     const elapsedHours = Math.max(0, (now.getTime() - runAtMs) / 3_600_000);
     const availableHours = [...inventory.files]
       .flatMap((file) => {
         const match = /\.f(\d{3})$/.exec(file);
-        return match?.[1] ? [Number(match[1])] : file.endsWith(".anl") ? [0] : [];
+        return match?.[1]
+          ? [Number(match[1])]
+          : file.endsWith(".anl")
+            ? [0]
+            : [];
       })
       .filter((hour) => Number.isInteger(hour) && hour >= 0 && hour <= 384);
     if (availableHours.length === 0) {
@@ -163,11 +202,15 @@ export class GfsService {
         ? hour
         : closest;
     });
-    const validTime = new Date(runAtMs + sourceForecastHour * 3_600_000).toISOString();
+    const validTime = new Date(
+      runAtMs + sourceForecastHour * 3_600_000,
+    ).toISOString();
     const logKey = `${inventory.run.runAt}|${sourceForecastHour}`;
     if (this.currentForecastLogKey !== logKey) {
       this.currentForecastLogKey = logKey;
-      const deltaMinutes = Math.round((Date.parse(validTime) - now.getTime()) / 60_000);
+      const deltaMinutes = Math.round(
+        (Date.parse(validTime) - now.getTime()) / 60_000,
+      );
       this.logger.log(
         `[GFS current] serverNowUtc=${now.toISOString()} serverTimezone=${Intl.DateTimeFormat().resolvedOptions().timeZone} serverUtcOffsetMinutes=${-now.getTimezoneOffset()} runAtUtc=${inventory.run.runAt} sourceForecastHour=${sourceForecastHour} validTimeUtc=${validTime} deltaMinutes=${deltaMinutes}`,
       );
@@ -191,7 +234,12 @@ export class GfsService {
         `GFS forecast hour ${normalizedHour} is unavailable`,
       );
     }
-    return this.getGrid(inventory.run, file, normalizedHour, gfsTileBounds(x, y));
+    return this.getGrid(
+      inventory.run,
+      file,
+      normalizedHour,
+      gfsTileBounds(x, y),
+    );
   }
 
   async getXyzTileFromInventory(
@@ -206,7 +254,14 @@ export class GfsService {
       throw new BadRequestException("Invalid GFS weather zoom");
     }
     const n = xyzTileCount(z);
-    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= n || y < 0 || y >= n) {
+    if (
+      !Number.isInteger(x) ||
+      !Number.isInteger(y) ||
+      x < 0 ||
+      x >= n ||
+      y < 0 ||
+      y >= n
+    ) {
       throw new BadRequestException("Invalid GFS XYZ tile coordinate");
     }
     const bounds = webMercatorTileBounds(z, x, y);
@@ -214,15 +269,25 @@ export class GfsService {
     const height = GFS_XYZ_GRID_SIZE;
     const fields: GfsGrid["fields"] = {};
     const fieldNames = [
-      "windU", "windV", "temperature", "precipitation", "precipitationRate", "cloudCover",
-      "pressure", "gust", "humidity",
+      "windU",
+      "windV",
+      "temperature",
+      "precipitation",
+      "precipitationRate",
+      "cloudCover",
+      "pressure",
+      "gust",
+      "humidity",
     ] as const;
-    for (const field of fieldNames) fields[field] = new Array<number | null>(width * height).fill(null);
+    for (const field of fieldNames)
+      fields[field] = new Array<number | null>(width * height).fill(null);
 
     for (let row = 0; row < height; row += 1) {
-      const latitude = bounds.north + (bounds.south - bounds.north) * (row / (height - 1));
+      const latitude =
+        bounds.north + (bounds.south - bounds.north) * (row / (height - 1));
       for (let column = 0; column < width; column += 1) {
-        const longitude = bounds.west + (bounds.east - bounds.west) * (column / (width - 1));
+        const longitude =
+          bounds.west + (bounds.east - bounds.west) * (column / (width - 1));
         const normalizedLongitude = longitude === 180 ? -180 : longitude;
         const geographic = gfsTileFromCoordinate(normalizedLongitude, latitude);
         const sourceKey = `${forecastHour}:${geographic.x}:${geographic.y}`;
@@ -242,7 +307,12 @@ export class GfsService {
         }
         const targetIndex = row * width + column;
         for (const field of fieldNames) {
-          const value = sampleGridField(source, field, latitude, normalizedLongitude);
+          const value = sampleGridField(
+            source,
+            field,
+            latitude,
+            normalizedLongitude,
+          );
           fields[field]![targetIndex] = value;
         }
       }
@@ -250,7 +320,9 @@ export class GfsService {
     return {
       model: "gfs",
       run: inventory.run.runAt,
-      forecastTime: new Date(Date.parse(inventory.run.runAt) + forecastHour * 3_600_000).toISOString(),
+      forecastTime: new Date(
+        Date.parse(inventory.run.runAt) + forecastHour * 3_600_000,
+      ).toISOString(),
       forecastHour,
       resolution: 0.25,
       bounds,
@@ -259,8 +331,14 @@ export class GfsService {
       gridOrder: "north-to-south,west-to-east",
       longitudeConvention: "-180..180",
       units: {
-        wind: "m/s", temperature: "K", precipitation: "kg/m2", precipitationRate: "kg/m2/s",
-        cloudCover: "%", pressure: "Pa", gust: "m/s", humidity: "%",
+        wind: "m/s",
+        temperature: "K",
+        precipitation: "kg/m2",
+        precipitationRate: "kg/m2/s",
+        cloudCover: "%",
+        pressure: "Pa",
+        gust: "m/s",
+        humidity: "%",
       },
       fields,
     };
@@ -313,7 +391,9 @@ export class GfsService {
         `[GFS] run discovery JOIN existing in-flight singleFlightJoins=${this.singleFlightJoins}`,
       );
       const inventory = await this.runDiscoveryInFlight;
-      if (forecastHours.every((hour) => this.fileForHour(inventory.files, hour))) {
+      if (
+        forecastHours.every((hour) => this.fileForHour(inventory.files, hour))
+      ) {
         return inventory;
       }
       // A different forecast-hour request cannot use the joined inventory.
@@ -336,7 +416,9 @@ export class GfsService {
       this.cachedRun = {
         inventory,
         storedAt,
-        expiresAt: storedAt + (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : 5 * 60 * 1_000),
+        expiresAt:
+          storedAt +
+          (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : 5 * 60 * 1_000),
       };
       this.logger.log(
         `[GFS] run cache STORE run=${inventory.run.date}/${String(inventory.run.cycle).padStart(2, "0")} ttl=${Math.floor((this.cachedRun.expiresAt - storedAt) / 1_000)}s tileRequests=${this.tileRequests} inventoryLookups=${this.inventoryLookups} runCacheHits=${this.runCacheHits} runCacheMisses=${this.runCacheMisses} singleFlightJoins=${this.singleFlightJoins}`,
@@ -379,7 +461,7 @@ export class GfsService {
         runKey,
         inventory
           ? "INVENTORY_MISSING_REQUESTED_HOURS"
-          : result.reason ?? "INVENTORY_UNAVAILABLE",
+          : (result.reason ?? "INVENTORY_UNAVAILABLE"),
       );
     }
     throw new ServiceUnavailableException(
@@ -674,7 +756,7 @@ export class GfsService {
     if (
       !response.ok ||
       bytes.length < 16 ||
-      String.fromCharCode(...bytes.slice(0, 4)) !== "GRIB"
+      String.fromCodePoint(...bytes.slice(0, 4)) !== "GRIB"
     ) {
       throw new BadGatewayException(
         "NOMADS returned an invalid GFS GRIB2 subset",

@@ -1,15 +1,15 @@
 export const GFS_FORECAST_HOURS = [0, 3, 6, 9, 12, 18, 24, 36, 48, 72] as const;
 
 export type GfsFieldName =
-  | 'windU'
-  | 'windV'
-  | 'temperature'
-  | 'precipitation'
-  | 'precipitationRate'
-  | 'cloudCover'
-  | 'pressure'
-  | 'gust'
-  | 'humidity';
+  | "windU"
+  | "windV"
+  | "temperature"
+  | "precipitation"
+  | "precipitationRate"
+  | "cloudCover"
+  | "pressure"
+  | "gust"
+  | "humidity";
 
 export type GfsBounds = {
   north: number;
@@ -26,7 +26,7 @@ export type GfsRun = {
 };
 
 export type GfsGrid = {
-  model: 'gfs';
+  model: "gfs";
   run: string;
   forecastTime: string;
   forecastHour: number;
@@ -34,23 +34,23 @@ export type GfsGrid = {
   bounds: GfsBounds;
   width: number;
   height: number;
-  gridOrder: 'north-to-south,west-to-east';
-  longitudeConvention: '-180..180';
+  gridOrder: "north-to-south,west-to-east";
+  longitudeConvention: "-180..180";
   units: {
-    wind: 'm/s';
-    temperature: 'K';
-    precipitation: 'kg/m2';
-    precipitationRate: 'kg/m2/s';
-    cloudCover: '%';
-    pressure: 'Pa';
-    gust: 'm/s';
-    humidity: '%';
+    wind: "m/s";
+    temperature: "K";
+    precipitation: "kg/m2";
+    precipitationRate: "kg/m2/s";
+    cloudCover: "%";
+    pressure: "Pa";
+    gust: "m/s";
+    humidity: "%";
   };
   fields: Partial<Record<GfsFieldName, Array<number | null>>>;
 };
 
 export type GfsPackage = {
-  model: 'gfs';
+  model: "gfs";
   run: GfsRun;
   resolution: 0.25;
   bounds: GfsBounds;

@@ -3,11 +3,11 @@ import {
   Injectable,
   Module,
   OnApplicationShutdown,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { DataSource } from 'typeorm';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { DataSource } from "typeorm";
 
-import { createTypeOrmOptions } from './typeorm.options.js';
+import { createTypeOrmOptions } from "./typeorm.options.js";
 
 @Injectable()
 class DatabaseLifecycle implements OnApplicationShutdown {
@@ -27,8 +27,8 @@ class DatabaseLifecycle implements OnApplicationShutdown {
       useFactory: async (config: ConfigService) =>
         new DataSource(
           createTypeOrmOptions(
-            config.getOrThrow<string>('DATABASE_URL'),
-            config.get<boolean>('DATABASE_MIGRATIONS_RUN', true),
+            config.getOrThrow<string>("DATABASE_URL"),
+            config.get<boolean>("DATABASE_MIGRATIONS_RUN", true),
           ),
         ).initialize(),
     },

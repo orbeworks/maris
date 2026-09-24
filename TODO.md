@@ -29,6 +29,8 @@ S-63 protegido → validar licença/permit → descriptografar → S-57 → seu 
 
 dinamarca: https://data.europa.eu/data/datasets/sdfe-dk-enc-01?locale=en&utm_source=chatgpt.com
 
+cartas nauticas do mundo todo: https://geoportal.shn.gob.ar/#/geoportal
+
 - [ ] Mapa
 - [ ] GPS
 - [ ] Coordenadas

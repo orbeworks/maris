@@ -14,12 +14,12 @@ export class EncArchiveDto {
 }
 
 export class IngestionChecksumDto {
-  algorithm!: 'sha256';
+  algorithm!: "sha256";
   value!: string;
 }
 
 export class IngestionDto {
-  archive!: Pick<EncArchiveDto, 'cells'>;
+  archive!: Pick<EncArchiveDto, "cells">;
   checksum!: IngestionChecksumDto;
   createdAt!: string;
   datasetId!: string;
@@ -27,7 +27,7 @@ export class IngestionDto {
   id!: string;
   originalFilename!: string;
   sizeBytes!: number;
-  sourceType!: 'S57';
+  sourceType!: "S57";
   status!: IngestionStatus;
   storagePath!: string;
   updatedAt!: string;
@@ -38,4 +38,4 @@ export class IngestionDto {
 export class UploadEncDto {
   file!: Express.Multer.File;
 }
-import type { IngestionStatus } from '../models/processing.js';
+import type { IngestionStatus } from "../models/processing.js";

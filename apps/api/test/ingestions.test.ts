@@ -1,50 +1,50 @@
-import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { test } from 'node:test';
+import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { test } from "node:test";
 
-import { ConfigService } from '@nestjs/config';
-import { NotFoundException } from '@nestjs/common';
-import { zipSync } from 'fflate';
-import { newDb } from 'pg-mem';
-import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { ConfigService } from "@nestjs/config";
+import { NotFoundException } from "@nestjs/common";
+import { zipSync } from "fflate";
+import { newDb } from "pg-mem";
+import "reflect-metadata";
+import { DataSource } from "typeorm";
 
-import { CreateChartCatalog2026091700000 } from '../src/database/migrations/2026091700000-create-chart-catalog.js';
-import type { EncArchiveDto } from '../src/ingestions/dtos/ingestion.dto.js';
-import { ChartDataset } from '../src/ingestions/entities/chart-dataset.entity.js';
-import { ChartIngestion } from '../src/ingestions/entities/chart-ingestion.entity.js';
-import { ChartVersion } from '../src/ingestions/entities/chart-version.entity.js';
-import { ChartCell } from '../src/ingestions/entities/chart-cell.entity.js';
-import { ChartCoverage } from '../src/ingestions/entities/chart-coverage.entity.js';
-import { ChartSurvey } from '../src/ingestions/entities/chart-survey.entity.js';
-import { ChartShard } from '../src/ingestions/entities/chart-shard.entity.js';
-import { ModelEncMetadata2026091800000 } from '../src/database/migrations/2026091800000-model-enc-metadata.js';
-import { CreateEncUploads2026091801000 } from '../src/database/migrations/2026091801000-create-enc-uploads.js';
-import { AddSourceObjectKey2026091802000 } from '../src/database/migrations/2026091802000-add-source-object-key.js';
-import { AddArtifactObjectKeys2026091803000 } from '../src/database/migrations/2026091803000-add-artifact-object-keys.js';
-import { AddSourceUrl2026091804000 } from '../src/database/migrations/2026091804000-add-source-url.js';
-import { AddEncObjectKey2026091805000 } from '../src/database/migrations/2026091805000-add-enc-object-key.js';
-import { IncrementalChartShards2026092002000 } from '../src/database/migrations/2026092002000-incremental-chart-shards.js';
+import { CreateChartCatalog2026091700000 } from "../src/database/migrations/2026091700000-create-chart-catalog.js";
+import type { EncArchiveDto } from "../src/ingestions/dtos/ingestion.dto.js";
+import { ChartDataset } from "../src/ingestions/entities/chart-dataset.entity.js";
+import { ChartIngestion } from "../src/ingestions/entities/chart-ingestion.entity.js";
+import { ChartVersion } from "../src/ingestions/entities/chart-version.entity.js";
+import { ChartCell } from "../src/ingestions/entities/chart-cell.entity.js";
+import { ChartCoverage } from "../src/ingestions/entities/chart-coverage.entity.js";
+import { ChartSurvey } from "../src/ingestions/entities/chart-survey.entity.js";
+import { ChartShard } from "../src/ingestions/entities/chart-shard.entity.js";
+import { ModelEncMetadata2026091800000 } from "../src/database/migrations/2026091800000-model-enc-metadata.js";
+import { CreateEncUploads2026091801000 } from "../src/database/migrations/2026091801000-create-enc-uploads.js";
+import { AddSourceObjectKey2026091802000 } from "../src/database/migrations/2026091802000-add-source-object-key.js";
+import { AddArtifactObjectKeys2026091803000 } from "../src/database/migrations/2026091803000-add-artifact-object-keys.js";
+import { AddSourceUrl2026091804000 } from "../src/database/migrations/2026091804000-add-source-url.js";
+import { AddEncObjectKey2026091805000 } from "../src/database/migrations/2026091805000-add-enc-object-key.js";
+import { IncrementalChartShards2026092002000 } from "../src/database/migrations/2026092002000-incremental-chart-shards.js";
 import type {
   ProcessingJob,
   ProcessingResult,
-} from '../src/ingestions/models/processing.js';
-import { ChartCatalogService } from '../src/ingestions/services/chart-catalog.service.js';
-import { IngestionPipelineService } from '../src/ingestions/services/ingestion-pipeline.service.js';
-import { IngestionsService } from '../src/ingestions/services/ingestions.service.js';
-import { LocalChartStorageService } from '../src/tiles/storage/local-chart-storage.service.js';
-import { TilesService } from '../src/tiles/tiles.service.js';
+} from "../src/ingestions/models/processing.js";
+import { ChartCatalogService } from "../src/ingestions/services/chart-catalog.service.js";
+import { IngestionPipelineService } from "../src/ingestions/services/ingestion-pipeline.service.js";
+import { IngestionsService } from "../src/ingestions/services/ingestions.service.js";
+import { LocalChartStorageService } from "../src/tiles/storage/local-chart-storage.service.js";
+import { TilesService } from "../src/tiles/tiles.service.js";
 
 // pg-mem returns DATE as a UTC Date object, unlike PostgreSQL's date-only string.
 // Keep its TypeORM hydration deterministic in this isolated test process.
-process.env.TZ = 'UTC';
+process.env.TZ = "UTC";
 
 const ARCHIVE: EncArchiveDto = {
   catalogPresent: true,
   cellCount: 1,
-  cells: [{ name: 'US5MIABC', updateNumbers: [1, 2] }],
+  cells: [{ name: "US5MIABC", updateNumbers: [1, 2] }],
   compressedBytes: 100,
   entryCount: 4,
   fileCount: 4,
@@ -55,44 +55,94 @@ const RESULT: ProcessingResult = {
   bounds: [-80.265019, 25.650179, -80.026909, 25.949411],
   cells: [
     {
-      edition: '4',
-      name: 'US5MIABC',
+      edition: "4",
+      name: "US5MIABC",
       updateNumber: 2,
       updatesApplied: [1, 2],
       metadata: {
-        source: 'NOAA', agencyCode: 550,
-        issueDate: '2025-09-03', updateApplicationDate: '2025-09-03',
-        compilationScale: 22000, horizontalDatum: 2, verticalDatum: 16, soundingDatum: 12,
-        coveredAreaNames: ['Biscayne Bay'],
-        coverage: [{ type: 'Feature', properties: { CATCOV: 1 },
-          geometry: { type: 'Polygon', coordinates: [[[-80, 25], [-79, 25], [-79, 26], [-80, 25]]] } }],
-        metaObjects: { M_QUAL: [{ type: 'Feature', geometry: null,
-          properties: { CATZOC: 3, SORDAT: '20130820', SORIND: 'US,US,reprt,L-1633/13' } }] },
+        source: "NOAA",
+        agencyCode: 550,
+        issueDate: "2025-09-03",
+        updateApplicationDate: "2025-09-03",
+        compilationScale: 22000,
+        horizontalDatum: 2,
+        verticalDatum: 16,
+        soundingDatum: 12,
+        coveredAreaNames: ["Biscayne Bay"],
+        coverage: [
+          {
+            type: "Feature",
+            properties: { CATCOV: 1 },
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [-80, 25],
+                  [-79, 25],
+                  [-79, 26],
+                  [-80, 25],
+                ],
+              ],
+            },
+          },
+        ],
+        metaObjects: {
+          M_QUAL: [
+            {
+              type: "Feature",
+              geometry: null,
+              properties: {
+                CATZOC: 3,
+                SORDAT: "20130820",
+                SORIND: "US,US,reprt,L-1633/13",
+              },
+            },
+          ],
+        },
         rawDatasetIdentification: { DSID_AGEN: 550, DSPM_SDAT: 12 },
       },
     },
   ],
-  manifestPath: 'soundg/versions/test/manifest.json',
-  storagePath: 'soundg/versions/test',
+  manifestPath: "soundg/versions/test/manifest.json",
+  storagePath: "soundg/versions/test",
 };
 
 async function createDatabase(migrateMetadata = true): Promise<DataSource> {
   const memory = newDb({ autoCreateForeignKeyIndices: true });
   memory.public.registerFunction({
-    implementation: () => 'maris_test',
-    name: 'current_database',
+    implementation: () => "maris_test",
+    name: "current_database",
   });
   memory.public.registerFunction({
-    implementation: () => 'PostgreSQL 16.0',
-    name: 'version',
+    implementation: () => "PostgreSQL 16.0",
+    name: "version",
   });
-  const dataSource = (await memory.adapters.createTypeormDataSource({
-    entities: [ChartDataset, ChartIngestion, ChartVersion, ChartShard, ChartCell, ChartCoverage, ChartSurvey],
-    migrations: [CreateChartCatalog2026091700000, ...(migrateMetadata ? [ModelEncMetadata2026091800000] : []), CreateEncUploads2026091801000, AddSourceObjectKey2026091802000, AddArtifactObjectKeys2026091803000, AddSourceUrl2026091804000, AddEncObjectKey2026091805000, ...(migrateMetadata ? [IncrementalChartShards2026092002000] : [])],
-    migrationsRun: true,
-    synchronize: false,
-    type: 'postgres',
-  }).initialize()) as DataSource;
+  const dataSource = (await memory.adapters
+    .createTypeormDataSource({
+      entities: [
+        ChartDataset,
+        ChartIngestion,
+        ChartVersion,
+        ChartShard,
+        ChartCell,
+        ChartCoverage,
+        ChartSurvey,
+      ],
+      migrations: [
+        CreateChartCatalog2026091700000,
+        ...(migrateMetadata ? [ModelEncMetadata2026091800000] : []),
+        CreateEncUploads2026091801000,
+        AddSourceObjectKey2026091802000,
+        AddArtifactObjectKeys2026091803000,
+        AddSourceUrl2026091804000,
+        AddEncObjectKey2026091805000,
+        ...(migrateMetadata ? [IncrementalChartShards2026092002000] : []),
+      ],
+      migrationsRun: true,
+      synchronize: false,
+      type: "postgres",
+    })
+    .initialize()) as DataSource;
   return dataSource;
 }
 
@@ -110,15 +160,17 @@ function config(values: Record<string, string>) {
 async function createIngestion(catalog: ChartCatalogService) {
   return catalog.createIngestion({
     archive: ARCHIVE,
-    checksum: 'a'.repeat(64),
+    checksum: "a".repeat(64),
     ingestionId: crypto.randomUUID(),
-    originalFilename: 'miami.zip',
+    originalFilename: "miami.zip",
     sizeBytes: 123,
-    storagePath: 'ingestions/source.zip',
+    storagePath: "ingestions/source.zip",
   });
 }
 
-function jobFor(ingestion: Awaited<ReturnType<typeof createIngestion>>): ProcessingJob {
+function jobFor(
+  ingestion: Awaited<ReturnType<typeof createIngestion>>,
+): ProcessingJob {
   return {
     archivePath: ingestion.storagePath,
     ingestionId: ingestion.id,
@@ -127,12 +179,12 @@ function jobFor(ingestion: Awaited<ReturnType<typeof createIngestion>>): Process
   };
 }
 
-test('valid upload is persisted and dispatches automatic processing', async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), 'maris-upload-test-'));
-  const temporaryFile = path.join(directory, 'upload.zip');
+test("valid upload is persisted and dispatches automatic processing", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "maris-upload-test-"));
+  const temporaryFile = path.join(directory, "upload.zip");
   const archive = zipSync({
-    'ENC_ROOT/US5MIABC/US5MIABC.000': new Uint8Array([1]),
-    'ENC_ROOT/US5MIABC/US5MIABC.001': new Uint8Array([2]),
+    "ENC_ROOT/US5MIABC/US5MIABC.000": new Uint8Array([1]),
+    "ENC_ROOT/US5MIABC/US5MIABC.001": new Uint8Array([2]),
   });
   await writeFile(temporaryFile, archive);
   const dispatched: ProcessingJob[] = [];
@@ -144,15 +196,15 @@ test('valid upload is persisted and dispatches automatic processing', async () =
     {
       createIngestion: async (input: { storagePath: string }) => ({
         archive: { cells: ARCHIVE.cells },
-        checksum: { algorithm: 'sha256' as const, value: 'a'.repeat(64) },
+        checksum: { algorithm: "sha256" as const, value: "a".repeat(64) },
         createdAt: new Date().toISOString(),
         datasetId: crypto.randomUUID(),
         error: null,
         id: ingestionId,
-        originalFilename: 'miami.zip',
+        originalFilename: "miami.zip",
         sizeBytes: archive.byteLength,
-        sourceType: 'S57' as const,
-        status: 'received' as const,
+        sourceType: "S57" as const,
+        status: "received" as const,
         storagePath: input.storagePath,
         updatedAt: new Date().toISOString(),
         versionId,
@@ -171,17 +223,17 @@ test('valid upload is persisted and dispatches automatic processing', async () =
     const result = await service.create({
       buffer: Buffer.alloc(0),
       destination: directory,
-      encoding: '7bit',
-      fieldname: 'file',
+      encoding: "7bit",
+      fieldname: "file",
       filename: path.basename(temporaryFile),
-      mimetype: 'application/zip',
-      originalname: 'miami.zip',
+      mimetype: "application/zip",
+      originalname: "miami.zip",
       path: temporaryFile,
       size: archive.byteLength,
       stream: undefined as never,
     });
 
-    assert.equal(result.status, 'received');
+    assert.equal(result.status, "received");
     assert.equal(dispatched.length, 1);
     assert.equal(dispatched[0]?.ingestionId, ingestionId);
   } finally {
@@ -189,7 +241,7 @@ test('valid upload is persisted and dispatches automatic processing', async () =
   }
 });
 
-test('successful processing produces ready metadata before publication', async () => {
+test("successful processing produces ready metadata before publication", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   try {
@@ -199,31 +251,35 @@ test('successful processing produces ready metadata before publication', async (
     await catalog.markReady(ingestion.id, RESULT);
 
     const ready = await catalog.findIngestion(ingestion.id);
-    assert.equal(ready?.status, 'ready');
+    assert.equal(ready?.status, "ready");
     const versions = await database.query(
-      'SELECT edition_metadata, status FROM chart_versions WHERE id = $1',
+      "SELECT edition_metadata, status FROM chart_versions WHERE id = $1",
       [ingestion.versionId],
     );
-    assert.equal(versions[0]?.status, 'ready');
+    assert.equal(versions[0]?.status, "ready");
     assert.deepEqual(versions[0]?.edition_metadata, []);
     const cell = await database.getRepository(ChartCell).findOneOrFail({
-      where: { versionId: ingestion.versionId }, relations: { coverages: true, surveys: true },
+      where: { versionId: ingestion.versionId },
+      relations: { coverages: true, surveys: true },
     });
-    assert.equal(cell.source, 'NOAA');
-    assert.equal(cell.edition, '4');
+    assert.equal(cell.source, "NOAA");
+    assert.equal(cell.edition, "4");
     assert.equal(cell.updateNumber, 2);
-    assert.equal(cell.issueDate, '2025-09-03');
-    assert.deepEqual(cell.coveredAreaNames, ['Biscayne Bay']);
+    assert.equal(cell.issueDate, "2025-09-03");
+    assert.deepEqual(cell.coveredAreaNames, ["Biscayne Bay"]);
     assert.equal(cell.coverages[0]?.category, 1);
-    assert.deepEqual(cell.coverages[0]?.geometry, RESULT.cells[0]?.metadata?.coverage[0]?.geometry);
+    assert.deepEqual(
+      cell.coverages[0]?.geometry,
+      RESULT.cells[0]?.metadata?.coverage[0]?.geometry,
+    );
     assert.equal(cell.surveys[0]?.dataQuality, 3);
-    assert.equal(cell.surveys[0]?.surveyDate, '2013-08-20');
+    assert.equal(cell.surveys[0]?.surveyDate, "2013-08-20");
   } finally {
     await database.destroy();
   }
 });
 
-test('metadata migration backfills both legacy and enriched cells without changing active versions', async () => {
+test("metadata migration backfills both legacy and enriched cells without changing active versions", async () => {
   const database = await createDatabase(false);
   const catalog = new ChartCatalogService(database);
   const runner = database.createQueryRunner();
@@ -232,24 +288,33 @@ test('metadata migration backfills both legacy and enriched cells without changi
     // migration; add only those columns while exercising this historical
     // migration in isolation.
     await database.query(
-      'ALTER TABLE chart_datasets ADD COLUMN revision bigint NOT NULL DEFAULT 0',
+      "ALTER TABLE chart_datasets ADD COLUMN revision bigint NOT NULL DEFAULT 0",
     );
     const ingestion = await createIngestion(catalog);
-    await database.query('UPDATE chart_versions SET edition_metadata = $1 WHERE id = $2',
-      [JSON.stringify([...RESULT.cells, { name: 'LEGACY', edition: '1', updateNumber: 0, updatesApplied: [] }]), ingestion.versionId]);
+    await database.query(
+      "UPDATE chart_versions SET edition_metadata = $1 WHERE id = $2",
+      [
+        JSON.stringify([
+          ...RESULT.cells,
+          { name: "LEGACY", edition: "1", updateNumber: 0, updatesApplied: [] },
+        ]),
+        ingestion.versionId,
+      ],
+    );
     await new ModelEncMetadata2026091800000().up(runner);
-    await database.query('ALTER TABLE chart_cells ADD COLUMN shard_id uuid');
+    await database.query("ALTER TABLE chart_cells ADD COLUMN shard_id uuid");
     const version = await database.getRepository(ChartVersion).findOneOrFail({
-      where: { id: ingestion.versionId }, relations: { cells: { coverages: true, surveys: true } },
+      where: { id: ingestion.versionId },
+      relations: { cells: { coverages: true, surveys: true } },
     });
     assert.equal(version.active, false);
     assert.equal(version.cells.length, 2);
-    const miami = version.cells.find((cell) => cell.name === 'US5MIABC')!;
-    assert.equal(miami.source, 'NOAA');
+    const miami = version.cells.find((cell) => cell.name === "US5MIABC")!;
+    assert.equal(miami.source, "NOAA");
     assert.equal(miami.coverages[0]?.category, 1);
     assert.equal(miami.surveys[0]?.dataQuality, 3);
-    assert.equal(miami.surveys[0]?.surveyDate, '2013-08-20');
-    const legacy = version.cells.find((cell) => cell.name === 'LEGACY')!;
+    assert.equal(miami.surveys[0]?.surveyDate, "2013-08-20");
+    const legacy = version.cells.find((cell) => cell.name === "LEGACY")!;
     assert.equal(legacy.issueDate, null);
     assert.equal(legacy.source, null);
     assert.deepEqual(legacy.coverages, []);
@@ -259,7 +324,7 @@ test('metadata migration backfills both legacy and enriched cells without changi
   }
 });
 
-test('ready version can be published and failed version cannot', async () => {
+test("ready version can be published and failed version cannot", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   try {
@@ -271,7 +336,7 @@ test('ready version can be published and failed version cannot', async () => {
     );
 
     const failed = await createIngestion(catalog);
-    await catalog.markFailed(failed.id, new Error('GDAL failed'));
+    await catalog.markFailed(failed.id, new Error("GDAL failed"));
     await assert.rejects(
       catalog.publishReadyVersion(failed.versionId),
       /Only ready chart versions can be published/,
@@ -281,7 +346,7 @@ test('ready version can be published and failed version cannot', async () => {
   }
 });
 
-test('publication atomically changes the single active version', async () => {
+test("publication atomically changes the single active version", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   try {
@@ -290,7 +355,7 @@ test('publication atomically changes the single active version', async () => {
     await catalog.publishReadyVersion(next.versionId);
 
     const active = await database.query(
-      'SELECT version_key FROM chart_versions WHERE active = true',
+      "SELECT version_key FROM chart_versions WHERE active = true",
     );
     assert.deepEqual(active, [{ version_key: next.versionKey }]);
 
@@ -298,19 +363,19 @@ test('publication atomically changes the single active version', async () => {
       `SELECT active, status FROM chart_versions WHERE version_key = 'miami-soundg-v2'`,
     );
     assert.equal(previous[0]?.active, false);
-    assert.equal(previous[0]?.status, 'published');
+    assert.equal(previous[0]?.status, "published");
   } finally {
     await database.destroy();
   }
 });
 
-test('publishing a new version does not remove previous artifacts', async () => {
+test("publishing a new version does not remove previous artifacts", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
-  const directory = await mkdtemp(path.join(tmpdir(), 'maris-artifacts-test-'));
+  const directory = await mkdtemp(path.join(tmpdir(), "maris-artifacts-test-"));
   const previousTile = path.join(
     directory,
-    'soundg/versions/miami-soundg-v2/11/567/872.pbf',
+    "soundg/versions/miami-soundg-v2/11/567/872.pbf",
   );
   await mkdir(path.dirname(previousTile), { recursive: true });
   await writeFile(previousTile, Buffer.from([1, 2, 3]));
@@ -325,34 +390,38 @@ test('publishing a new version does not remove previous artifacts', async () => 
   }
 });
 
-test('failed processing preserves the currently published version', async () => {
+test("failed processing preserves the currently published version", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   const ingestion = await createIngestion(catalog);
   const pipeline = new IngestionPipelineService(
-    config({ STORAGE_DIR: '/tmp' }),
+    config({ STORAGE_DIR: "/tmp" }),
     catalog,
     { inspect: async () => ARCHIVE } as never,
-    { process: async () => { throw new Error('ogr2ogr failed'); } } as never,
+    {
+      process: async () => {
+        throw new Error("ogr2ogr failed");
+      },
+    } as never,
   );
   try {
     await pipeline.run(jobFor(ingestion));
-    assert.equal((await catalog.findIngestion(ingestion.id))?.status, 'failed');
+    assert.equal((await catalog.findIngestion(ingestion.id))?.status, "failed");
     assert.equal(
-      (await catalog.getActiveVersion('soundg'))?.version_key,
-      'miami-soundg-v2',
+      (await catalog.getActiveVersion("soundg"))?.version_key,
+      "miami-soundg-v2",
     );
   } finally {
     await database.destroy();
   }
 });
 
-test('automatic pipeline reaches published after a successful job', async () => {
+test("automatic pipeline reaches published after a successful job", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   const ingestion = await createIngestion(catalog);
   const pipeline = new IngestionPipelineService(
-    config({ STORAGE_DIR: '/tmp' }),
+    config({ STORAGE_DIR: "/tmp" }),
     catalog,
     { inspect: async () => ARCHIVE } as never,
     { process: async () => RESULT } as never,
@@ -361,10 +430,10 @@ test('automatic pipeline reaches published after a successful job', async () => 
     await pipeline.run(jobFor(ingestion));
     assert.equal(
       (await catalog.findIngestion(ingestion.id))?.status,
-      'published',
+      "published",
     );
     assert.equal(
-      (await catalog.getActiveVersion('soundg'))?.version_key,
+      (await catalog.getActiveVersion("soundg"))?.version_key,
       ingestion.versionKey,
     );
   } finally {
@@ -372,10 +441,10 @@ test('automatic pipeline reaches published after a successful job', async () => 
   }
 });
 
-test('TileJSON does not expose a legacy active version without catalog shards', async () => {
+test("TileJSON does not expose a legacy active version without catalog shards", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
-  const directory = await mkdtemp(path.join(tmpdir(), 'maris-tilejson-test-'));
+  const directory = await mkdtemp(path.join(tmpdir(), "maris-tilejson-test-"));
   try {
     const ingestion = await createIngestion(catalog);
     const result = {
@@ -389,20 +458,20 @@ test('TileJSON does not expose a legacy active version without catalog shards', 
     const versionDirectory = path.join(directory, result.storagePath);
     await mkdir(versionDirectory, { recursive: true });
     await writeFile(
-      path.join(versionDirectory, 'manifest.json'),
+      path.join(versionDirectory, "manifest.json"),
       JSON.stringify({
         bounds: RESULT.bounds,
         createdAt: new Date().toISOString(),
-        dataset: 'soundg',
-        format: 'mvt',
+        dataset: "soundg",
+        format: "mvt",
         maxzoom: 16,
         minzoom: 8,
-        name: 'Miami SOUNDG',
+        name: "Miami SOUNDG",
         tilePathTemplate: `${result.storagePath}/{z}/{x}/{y}.pbf`,
         vectorLayers: [
           {
-            fields: { DEPTH: 'Number' },
-            id: 'soundings',
+            fields: { DEPTH: "Number" },
+            id: "soundings",
             maxzoom: 16,
             minzoom: 8,
           },
@@ -416,7 +485,7 @@ test('TileJSON does not expose a legacy active version without catalog shards', 
     );
     const tiles = new TilesService(storage, catalog);
     await assert.rejects(
-      tiles.getTileJson('https://api.example.test'),
+      tiles.getTileJson("https://api.example.test"),
       NotFoundException,
     );
   } finally {
@@ -425,54 +494,60 @@ test('TileJSON does not expose a legacy active version without catalog shards', 
   }
 });
 
-test('TileJSON returns not found when no ENC version is published', async () => {
+test("TileJSON returns not found when no ENC version is published", async () => {
   const tiles = new TilesService(
     {} as never,
     { getPublishedCatalog: async () => null } as never,
   );
 
   await assert.rejects(
-    tiles.getTileJson('https://api.example.test'),
+    tiles.getTileJson("https://api.example.test"),
     NotFoundException,
   );
 });
 
-test('incremental shards advance immutable catalog revisions without replacing earlier uploads', async () => {
+test("incremental shards advance immutable catalog revisions without replacing earlier uploads", async () => {
   const database = await createDatabase();
   const catalog = new ChartCatalogService(database);
   try {
     const first = await createIngestion(catalog);
     const firstRevision = await catalog.publishShard(first.id, {
       ...RESULT,
-      artifactObjectKey: 'datasets/soundg/first/tiles.pmtiles',
-      manifestObjectKey: 'datasets/soundg/first/manifest.json',
+      artifactObjectKey: "datasets/soundg/first/tiles.pmtiles",
+      manifestObjectKey: "datasets/soundg/first/manifest.json",
       sequence: 0,
-      shardKey: 'first-shard',
+      shardKey: "first-shard",
     });
     assert.equal(firstRevision, 1);
 
     const second = await createIngestion(catalog);
     const secondRevision = await catalog.publishShard(second.id, {
       ...RESULT,
-      cells: RESULT.cells.map((cell) => ({ ...cell, name: 'BR5TEST' })),
-      artifactObjectKey: 'datasets/soundg/second/tiles.pmtiles',
-      manifestObjectKey: 'datasets/soundg/second/manifest.json',
+      cells: RESULT.cells.map((cell) => ({ ...cell, name: "BR5TEST" })),
+      artifactObjectKey: "datasets/soundg/second/tiles.pmtiles",
+      manifestObjectKey: "datasets/soundg/second/manifest.json",
       sequence: 0,
-      shardKey: 'second-shard',
+      shardKey: "second-shard",
     });
     assert.equal(secondRevision, 2);
 
     assert.deepEqual(
-      (await catalog.getPublishedCatalog('soundg', 1))?.shards.map((shard) => shard.shardKey),
-      ['first-shard'],
+      (await catalog.getPublishedCatalog("soundg", 1))?.shards.map(
+        (shard) => shard.shardKey,
+      ),
+      ["first-shard"],
     );
     assert.deepEqual(
-      (await catalog.getPublishedCatalog('soundg'))?.shards.map((shard) => shard.shardKey),
-      ['first-shard', 'second-shard'],
+      (await catalog.getPublishedCatalog("soundg"))?.shards.map(
+        (shard) => shard.shardKey,
+      ),
+      ["first-shard", "second-shard"],
     );
     assert.deepEqual(
-      (await catalog.getPublishedCells('soundg', 2)).map((cell) => cell.name).sort(),
-      ['BR5TEST', 'US5MIABC'],
+      (await catalog.getPublishedCells("soundg", 2))
+        .map((cell) => cell.name)
+        .sort(),
+      ["BR5TEST", "US5MIABC"],
     );
   } finally {
     await database.destroy();

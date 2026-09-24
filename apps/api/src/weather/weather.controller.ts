@@ -31,7 +31,10 @@ function etagFor(body: Buffer | string) {
 
 function isNotModified(request: Request, etag: string) {
   const value = request.header("If-None-Match");
-  return value === "*" || value?.split(",").some((candidate) => candidate.trim() === etag);
+  return (
+    value === "*" ||
+    value?.split(",").some((candidate) => candidate.trim() === etag)
+  );
 }
 
 @Controller("weather")
@@ -57,10 +60,21 @@ export class WeatherController {
     const x = Number(xValue);
     const y = Number(yValue);
     const forecastHour = Number(forecastHourValue);
-    const tileCount = Number.isInteger(z) && z >= 0 && z <= GFS_MAX_WEATHER_ZOOM ? xyzTileCount(z) : 0;
-    if (![z, x, y, forecastHour].every(Number.isInteger) ||
-        z < 0 || z > GFS_MAX_WEATHER_ZOOM || x < 0 || x >= tileCount || y < 0 || y >= tileCount ||
-        forecastHour < 0 || forecastHour > 384) {
+    const tileCount =
+      Number.isInteger(z) && z >= 0 && z <= GFS_MAX_WEATHER_ZOOM
+        ? xyzTileCount(z)
+        : 0;
+    if (
+      ![z, x, y, forecastHour].every(Number.isInteger) ||
+      z < 0 ||
+      z > GFS_MAX_WEATHER_ZOOM ||
+      x < 0 ||
+      x >= tileCount ||
+      y < 0 ||
+      y >= tileCount ||
+      forecastHour < 0 ||
+      forecastHour > 384
+    ) {
       throw new BadRequestException(
         "Invalid GFS tile coordinate or forecast hour",
       );
@@ -92,7 +106,9 @@ export class WeatherController {
         ? await this.redisCache?.getTile(activeRun.run, forecastHour, x, y, z)
         : null;
       if (!body) {
-        const inventory = await this.gfsService.getCompleteInventory([forecastHour]);
+        const inventory = await this.gfsService.getCompleteInventory([
+          forecastHour,
+        ]);
         const grid = await this.gfsService.getXyzTileFromInventory(
           inventory,
           z,

@@ -1,17 +1,25 @@
-import type { MigrationInterface, QueryRunner } from 'typeorm';
+import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class DropSourceObjectStorage2026092001000 implements MigrationInterface {
-  name = 'DropSourceObjectStorage2026092001000';
+  name = "DropSourceObjectStorage2026092001000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP TABLE IF EXISTS enc_uploads');
-    await queryRunner.query('ALTER TABLE chart_ingestions DROP COLUMN IF EXISTS source_object_key');
-    await queryRunner.query('ALTER TABLE chart_versions DROP COLUMN IF EXISTS enc_object_key');
+    await queryRunner.query("DROP TABLE IF EXISTS enc_uploads");
+    await queryRunner.query(
+      "ALTER TABLE chart_ingestions DROP COLUMN IF EXISTS source_object_key",
+    );
+    await queryRunner.query(
+      "ALTER TABLE chart_versions DROP COLUMN IF EXISTS enc_object_key",
+    );
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('ALTER TABLE chart_ingestions ADD COLUMN IF NOT EXISTS source_object_key text');
-    await queryRunner.query('ALTER TABLE chart_versions ADD COLUMN IF NOT EXISTS enc_object_key text');
+    await queryRunner.query(
+      "ALTER TABLE chart_ingestions ADD COLUMN IF NOT EXISTS source_object_key text",
+    );
+    await queryRunner.query(
+      "ALTER TABLE chart_versions ADD COLUMN IF NOT EXISTS enc_object_key text",
+    );
     await queryRunner.query(`CREATE TABLE IF NOT EXISTS enc_uploads (
       id uuid PRIMARY KEY,
       upload_id text NOT NULL UNIQUE,

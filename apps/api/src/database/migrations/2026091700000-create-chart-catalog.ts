@@ -1,7 +1,7 @@
-import type { MigrationInterface, QueryRunner } from 'typeorm';
+import type { MigrationInterface, QueryRunner } from "typeorm";
 
 export class CreateChartCatalog2026091700000 implements MigrationInterface {
-  name = 'CreateChartCatalog2026091700000';
+  name = "CreateChartCatalog2026091700000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -117,9 +117,11 @@ export class CreateChartCatalog2026091700000 implements MigrationInterface {
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS chart_versions_one_active_per_dataset');
-    await queryRunner.query('DROP TABLE IF EXISTS chart_versions');
-    await queryRunner.query('DROP TABLE IF EXISTS chart_ingestions');
-    await queryRunner.query('DROP TABLE IF EXISTS chart_datasets');
+    await queryRunner.query(
+      "DROP INDEX IF EXISTS chart_versions_one_active_per_dataset",
+    );
+    await queryRunner.query("DROP TABLE IF EXISTS chart_versions");
+    await queryRunner.query("DROP TABLE IF EXISTS chart_ingestions");
+    await queryRunner.query("DROP TABLE IF EXISTS chart_datasets");
   }
 }
