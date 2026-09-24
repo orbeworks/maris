@@ -6,6 +6,7 @@ export class ChartQueryDto {
     public lon: number,
     public version?: string,
   ) {}
+
   static parse(query: Record<string, unknown>): ChartQueryDto {
     const number = (value: unknown, limit: number) => {
       if (
@@ -16,10 +17,13 @@ export class ChartQueryDto {
       ) {
         throw new BadRequestException("Valid lat and lon are required");
       }
-      return Number(value);
+
+      return Number(Number(value).toFixed(5));
     };
-    const lat = number(query.lat, 90),
-      lon = number(query.lon, 180);
+
+    const lat = number(query.lat, 90);
+    const lon = number(query.lon, 180);
+
     if (
       query.version !== undefined &&
       (typeof query.version !== "string" ||
@@ -27,6 +31,7 @@ export class ChartQueryDto {
     ) {
       throw new BadRequestException("Invalid chart version");
     }
+
     return new ChartQueryDto(lat, lon, query.version as string | undefined);
   }
 }

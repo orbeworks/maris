@@ -156,8 +156,7 @@ export class TilesService {
     this.selectionCache.set(revision, loading);
     while (this.selectionCache.size > 4) {
       const oldest = this.selectionCache.keys().next().value as
-        | number
-        | undefined;
+        number | undefined;
       if (oldest !== undefined && oldest !== revision)
         this.selectionCache.delete(oldest);
       else break;

@@ -220,7 +220,7 @@ export class GfsService {
     return { inventory, sourceForecastHour, validTime };
   }
 
-  @Cacheable({ ttl: TimeInSeconds.HOUR })
+  @Cacheable()
   private async getTileFromInventory(
     inventory: Inventory,
     x: number,
@@ -245,7 +245,7 @@ export class GfsService {
     );
   }
 
-  @Cacheable({ ttl: TimeInSeconds.HOUR })
+  @Cacheable()
   async getXyzTileFromInventory(
     inventory: Inventory,
     z: number,
