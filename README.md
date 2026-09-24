@@ -98,17 +98,15 @@ curl --fail-with-body \
 ```
 
 Depois da resposta `received`, a própria API local inicia a ingestão diretamente,
-sem BullMQ e sem fila no Redis. Apenas uma ingestão ENC roda por vez; um segundo
-upload recebe `503` enquanto a primeira estiver em processamento. Jobs locais
-interrompidos são retomados a partir do estado persistido no PostgreSQL quando a
-API reinicia.
+sem uma fila externa. Apenas uma ingestão ENC roda por vez; um segundo upload
+recebe `503` enquanto a primeira estiver em processamento. Jobs locais interrompidos
+são retomados a partir do estado persistido no PostgreSQL quando a API reinicia.
 O executor roda dentro da API com uma ingestão por vez. Dentro dela,
 `ENC_CELL_CONCURRENCY` (padrão `2`) limita a fila local de células: extração e
 leitura de metadados das próximas células acontecem enquanto um único escritor
 incorpora a anterior ao GeoPackage. O limite evita escritas SQLite concorrentes
-e aplica backpressure sem usar Redis. O PostgreSQL guarda o estado necessário
-para retomar uma ingestão interrompida quando a API local é iniciada novamente;
-Redis não participa do processamento ENC.
+e aplica backpressure. O PostgreSQL guarda o estado necessário para retomar uma
+ingestão interrompida quando a API local é iniciada novamente.
 Os estados persistidos são `received`, `validating`, `processing`, `ready`,
 `failed` e `published`. O trabalho pesado roda em processos GDAL/gerador
 separados do processo HTTP. Ingestões interrompidas são retomadas na próxima

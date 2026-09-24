@@ -16,7 +16,6 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 
-import { Cacheable } from "../utils/cacheable.decorator.js";
 import { gfsTileBounds, gfsTileFromCoordinate } from "./gfs-grid-tiles.js";
 import { type GfsBounds, type GfsGrid, type GfsRun } from "./gfs.types.js";
 import {
@@ -186,7 +185,6 @@ export class GfsService {
     );
   }
 
-  @Cacheable()
   async getCurrentForecast(now = new Date()): Promise<CurrentGfsForecast> {
     const inventory = await this.findCompleteInventory([0]);
 
@@ -257,7 +255,6 @@ export class GfsService {
     };
   }
 
-  @Cacheable()
   private async getTileFromInventory(
     inventory: Inventory,
     x: number,
@@ -286,7 +283,6 @@ export class GfsService {
     );
   }
 
-  @Cacheable()
   async getXyzTileFromInventory(
     inventory: Inventory,
     z: number,
@@ -435,7 +431,6 @@ export class GfsService {
     return longitude < 0 ? longitude + 360 : longitude;
   }
 
-  @Cacheable()
   private async findCompleteInventory(
     forecastHours: number[],
   ): Promise<Inventory> {

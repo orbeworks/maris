@@ -42,10 +42,9 @@ their grids.
 
 ## Cache
 
-The route resolves data on demand and does not prefetch or store rendered tiles
-in Redis. Downloaded source subsets are stored under `GFS_CACHE_DIR/<run>/` as
-gzip-compressed JSON so repeated requests do not need to download and parse the
-same GRIB2 subset again.
+The route resolves data on demand. Downloaded source subsets are stored under
+`GFS_CACHE_DIR/<run>/` as gzip-compressed JSON so repeated requests do not need
+to download and parse the same GRIB2 subset again.
 
 ## Validation
 
