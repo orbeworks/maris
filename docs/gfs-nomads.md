@@ -42,10 +42,9 @@ their grids.
 
 ## Cache
 
-The route resolves data on demand and does not prefetch or store rendered tiles
-in Redis. Downloaded source subsets are stored under `GFS_CACHE_DIR/<run>/` as
-gzip-compressed JSON so repeated requests do not need to download and parse the
-same GRIB2 subset again.
+The route resolves data on demand. Rendered grids are cached in Redis by the
+service's `@Cacheable` decorator. Downloaded source subsets are processed in
+temporary files and are not persisted after the request completes.
 
 ## Validation
 
@@ -55,6 +54,6 @@ Run the real NOAA integration test with:
 pnpm --filter @maris/api test:gfs
 ```
 
-It downloads a 1° × 1° subset, parses GRIB2 with ecCodes, checks the expected
+It downloads a 10° × 10° subset, parses GRIB2 with ecCodes, checks the expected
 5 × 5 grid and prints finite min/max values for every field. The test is
 network-dependent and is intentionally not part of the default test suite.

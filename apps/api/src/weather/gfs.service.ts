@@ -1,11 +1,9 @@
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { gzip, gunzip } from "node:zlib";
 
 import {
   BadGatewayException,
@@ -27,8 +25,6 @@ import {
 } from "./xyz-tiles.js";
 
 const execFileAsync = promisify(execFile);
-const gzipAsync = promisify(gzip);
-const gunzipAsync = promisify(gunzip);
 
 const NOMADS_FILTER_URL =
   "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl";
@@ -583,16 +579,6 @@ export class GfsService {
     const segments = this.splitAtPrimeMeridian(bounds);
 
     if (segments.length > 1) {
-      const mergedCachePath = this.cachePath(run, forecastHour, file, bounds);
-
-      try {
-        return JSON.parse(
-          (await gunzipAsync(await readFile(mergedCachePath))).toString("utf8"),
-        ) as GfsGrid;
-      } catch {
-        // Cache miss.
-      }
-
       const grids = await Promise.all(
         segments.map((segment) =>
           this.getGridSubset(run, file, forecastHour, segment),
@@ -600,17 +586,6 @@ export class GfsService {
       );
 
       const merged = this.mergeGrids(grids as [GfsGrid, GfsGrid], bounds);
-
-      await mkdir(path.dirname(mergedCachePath), {
-        recursive: true,
-      });
-
-      await writeFile(
-        mergedCachePath,
-        await gzipAsync(JSON.stringify(merged), {
-          level: 6,
-        }),
-      );
 
       return merged;
     }
@@ -624,34 +599,11 @@ export class GfsService {
     forecastHour: number,
     bounds: GfsBounds,
   ): Promise<GfsGrid> {
-    const cachePath = this.cachePath(run, forecastHour, file, bounds);
-
-    try {
-      return JSON.parse(
-        (await gunzipAsync(await readFile(cachePath))).toString("utf8"),
-      ) as GfsGrid;
-    } catch {
-      // Cache miss.
-    }
-
     const grib = await this.downloadSubset(run, file, bounds);
 
     const parsed = await this.parseGrib(grib);
 
-    const grid = this.normalizeGrid(run, forecastHour, parsed, bounds);
-
-    await mkdir(path.dirname(cachePath), {
-      recursive: true,
-    });
-
-    await writeFile(
-      cachePath,
-      await gzipAsync(JSON.stringify(grid), {
-        level: 6,
-      }),
-    );
-
-    return grid;
+    return this.normalizeGrid(run, forecastHour, parsed, bounds);
   }
 
   private splitAtPrimeMeridian(bounds: GfsBounds): GfsBounds[] {
@@ -947,28 +899,4 @@ export class GfsService {
     };
   }
 
-  private cachePath(
-    run: GfsRun,
-    forecastHour: number,
-    file: string,
-    bounds: GfsBounds,
-  ) {
-    const key = createHash("sha256")
-      .update(
-        JSON.stringify({
-          run,
-          forecastHour,
-          file,
-          bounds,
-          resolution: RESOLUTION,
-        }),
-      )
-      .digest("hex");
-
-    return path.join(
-      this.config.get<string>("GFS_CACHE_DIR", ".storage/gfs"),
-      `${run.date}${String(run.cycle).padStart(2, "0")}`,
-      `f${String(forecastHour).padStart(3, "0")}-${key}.json.gz`,
-    );
-  }
 }

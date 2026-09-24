@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { test } from "node:test";
 
 import { GfsService } from "../../src/weather/gfs.service.js";
@@ -9,11 +8,8 @@ test(
   "downloads and parses a real NOAA GFS subset",
   { skip: !runRealTest },
   async () => {
-    const cacheDirectory = `/tmp/maris-gfs-test-${process.pid}`;
-    await rm(cacheDirectory, { recursive: true, force: true });
     const config = {
       get<T>(key: string, fallback?: T) {
-        if (key === "GFS_CACHE_DIR") return cacheDirectory as T;
         if (key === "GFS_PARSER_PYTHON")
           return (process.env.GFS_PARSER_PYTHON ?? "python3") as T;
         if (key === "GFS_PARSER_SCRIPT")
@@ -58,11 +54,10 @@ test(
         `GFS ${name}: min=${Math.min(...finite)} max=${Math.max(...finite)} count=${finite.length}`,
       );
     }
-    if (grid.width !== 5 || grid.height !== 5) {
+    if (grid.width !== 41 || grid.height !== 41) {
       throw new Error(
         `Unexpected 0.25 degree subset dimensions: ${grid.width}x${grid.height}`,
       );
     }
-    await rm(cacheDirectory, { recursive: true, force: true });
   },
 );
