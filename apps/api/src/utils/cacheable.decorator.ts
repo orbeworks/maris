@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { TimeInSeconds } from "./time-in-seconds.enum.js";
 
 interface CacheProvider {
   get<T = unknown>(key: string): Promise<T | null>;
@@ -29,7 +30,7 @@ const defaultCacheProvider: CacheProvider = {
     return entry.value as T;
   },
 
-  async set(key: string, value: unknown, ttlInSeconds = 60 * 60) {
+  async set(key: string, value: unknown, ttlInSeconds = TimeInSeconds.HOUR) {
     memoryCache.set(key, {
       value,
       expiresAt: Date.now() + Math.max(0, ttlInSeconds) * 1_000,
@@ -84,7 +85,7 @@ interface CacheableOptions {
 }
 
 export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
-  const { ttl = 60 * 60, key, keyPrefix } = options;
+  const { ttl = TimeInSeconds.HOUR, key, keyPrefix } = options;
 
   return function (
     target: object,
