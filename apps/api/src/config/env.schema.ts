@@ -8,6 +8,9 @@ export const envSchema = Joi.object({
   ENC_PROCESSING_ENABLED: Joi.boolean().default(true),
   ENC_CELL_CONCURRENCY: Joi.number().integer().min(1).max(8).default(2),
   ENC_SHARD_CELL_COUNT: Joi.number().integer().min(10).max(500).default(100),
+  REDIS_URL: Joi.string()
+    .uri({ scheme: ["redis", "rediss"] })
+    .required(),
   HOST: Joi.string().default("0.0.0.0"),
   MAX_ARCHIVE_ENTRIES: Joi.number().integer().positive().default(50_000),
   MAX_UNCOMPRESSED_BYTES: Joi.number()

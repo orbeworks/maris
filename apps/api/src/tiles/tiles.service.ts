@@ -11,6 +11,8 @@ import { ChartSelection } from "../charts/models/chart-selection.js";
 import { ChartCatalogService } from "../ingestions/services/chart-catalog.service.js";
 import type { TileJsonDto } from "./dtos/tile-json.dto.js";
 import { CHART_STORAGE, type ChartStorage } from "./storage/chart-storage.js";
+import { Cacheable } from "../utils/cacheable.decorator.js";
+import { TimeInSeconds } from "../utils/time-in-seconds.enum.js";
 
 type DecodedFeature = {
   extent: number;
@@ -43,6 +45,9 @@ export class TilesService {
     private readonly catalog: ChartCatalogService,
   ) {}
 
+  @Cacheable({
+    ttl: TimeInSeconds.DAY,
+  })
   async getLatestTile(
     z: string,
     x: string,
@@ -93,6 +98,9 @@ export class TilesService {
     return this.composeTiles(tiles, selection, zoom, column, row);
   }
 
+  @Cacheable({
+    ttl: TimeInSeconds.DAY,
+  })
   async getTileJson(baseUrl: string): Promise<TileJsonDto> {
     const catalog = this.catalog.getPublishedCatalog
       ? await this.catalog.getPublishedCatalog("soundg")

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 
+import { resetGlobalCache } from "../utils/cacheable.decorator.js";
 import { GfsService } from "./gfs.service.js";
 
 type InventoryLookup = (hours: number[]) => Promise<unknown>;
@@ -28,7 +29,33 @@ async function lookup(service: GfsService, hours: number[]) {
   ).findCompleteInventory(hours);
 }
 
-test("each successful inventory lookup checks NOMADS directly", async () => {
+beforeEach(() => {
+  resetGlobalCache();
+});
+
+test("first run lookup misses, stores, and the next tile lookup hits memory", async () => {
+  const service = serviceWithNegativeTtl();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
+  };
+  try {
+    const first = await lookup(service, [0]);
+    const second = await lookup(service, [0]);
+    assert.equal(first, second);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("different forecast-hour requests use distinct cache entries", async () => {
   const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -42,6 +69,29 @@ test("each successful inventory lookup checks NOMADS directly", async () => {
   };
   try {
     await lookup(service, [0]);
+    await lookup(service, [3]);
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("clearing the process cache performs a new inventory lookup", async () => {
+  const service = serviceWithNegativeTtl();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
+  };
+  try {
+    await lookup(service, [0]);
+    await lookup(service, [0]);
+    resetGlobalCache();
     await lookup(service, [0]);
     assert.equal(calls, 2);
   } finally {
@@ -111,6 +161,80 @@ test("negative cache expiry allows a previously unavailable run to be retried", 
     await new Promise((resolve) => setTimeout(resolve, 5));
     await lookup(service, [0]);
     assert.ok(calls > callsAfterFirstLookup);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a cached valid run remains available and is not replaced by an invalid lookup", async () => {
+  const service = serviceWithNegativeTtl();
+  const originalFetch = globalThis.fetch;
+  let valid = true;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return valid
+      ? ({
+          ok: true,
+          status: 200,
+          text: async () => inventoryHtml([0]),
+        } as Response)
+      : ({ ok: false, status: 500, text: async () => "" } as Response);
+  };
+  try {
+    const first = await lookup(service, [0]);
+    valid = false;
+    const second = await lookup(service, [0]);
+    assert.equal(first, second);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("concurrent cache misses share one run discovery", async () => {
+  const service = serviceWithNegativeTtl();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => inventoryHtml(),
+    } as Response;
+  };
+  try {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => lookup(service, [0])),
+    );
+    assert.equal(calls, 1);
+    assert.ok(results.every((result) => result === results[0]));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a failed single-flight discovery is shared and cleared for a later retry", async () => {
+  const service = serviceWithNegativeTtl(1);
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return { ok: false, status: 500, text: async () => "" } as Response;
+  };
+  try {
+    const firstBatch = await Promise.allSettled(
+      Array.from({ length: 10 }, () => lookup(service, [0])),
+    );
+    assert.ok(firstBatch.every((result) => result.status === "rejected"));
+    const callsAfterFirstBatch = calls;
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await assert.rejects(() => lookup(service, [0]), /No complete GFS run/);
+    assert.ok(calls > callsAfterFirstBatch);
   } finally {
     globalThis.fetch = originalFetch;
   }

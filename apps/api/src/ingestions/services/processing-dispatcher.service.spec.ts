@@ -57,7 +57,7 @@ test('processes directly, rejects concurrent ingestion, and removes the source',
   ]);
 });
 
-test('resumes a recoverable PostgreSQL job', async () => {
+test('resumes a recoverable PostgreSQL job without Redis', async () => {
   const calls: string[] = [];
   let firstLookup = true;
   const dispatcher = new ProcessingDispatcherService(
@@ -81,7 +81,7 @@ test('resumes a recoverable PostgreSQL job', async () => {
   assert.deepEqual(calls, ['cleanup', 'run', 'remove']);
 });
 
-test('production mode rejects ingestion when processing is disabled', async () => {
+test('production mode rejects ingestion without touching Redis', async () => {
   const dispatcher = new ProcessingDispatcherService(
     {} as never,
     {} as never,
