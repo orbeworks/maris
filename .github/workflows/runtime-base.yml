@@ -44,3 +44,12 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: Make the runtime image public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            --method PATCH \
+            "/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/maris-runtime" \
+            -f visibility=public
