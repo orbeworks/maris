@@ -141,7 +141,7 @@ O teste de hook usa relógio controlado e o hook real com AppState substituído.
 Nginx real em container, opcional na suíte padrão:
 
 ```
-TEST_NGINX_DOCKER=1 pnpm --filter @maris/api exec tsx --test test/nginx-tiles.test.ts
+TEST_NGINX_DOCKER=1 pnpm --filter @maris/api exec tsx --test test/nginx-tiles.e2e-spec.ts
 ```
 
 Builders nativos devem ser executados após alterações C++/Objective-C++/JNI.

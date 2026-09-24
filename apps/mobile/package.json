@@ -8,7 +8,7 @@
     "ios": "expo run:ios",
     "android": "expo run:android",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test weather/*.test.ts offline/*.test.ts components/*.test.ts charts/*.test.ts map/*.test.ts"
+    "test": "tsx --test weather/*.spec.ts offline/*.spec.ts components/*.spec.ts charts/*.spec.ts map/*.spec.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
