@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { deserialize, serialize as serializeCacheValue } from "node:v8";
+import { Redis } from "ioredis";
 import { TimeInSeconds } from "./time-in-seconds.enum.js";
 
 interface CacheProvider {
@@ -7,52 +9,66 @@ interface CacheProvider {
   del?(key: string): Promise<unknown>;
 }
 
-type MemoryEntry = {
-  value: unknown;
-  expiresAt: number;
-};
-
-const memoryCache = new Map<string, MemoryEntry>();
 const inFlight = new Map<string, Promise<unknown>>();
+let redisClient: Redis | undefined;
+let redisUrl: string | undefined;
 
-const defaultCacheProvider: CacheProvider = {
+const redisCacheProvider: CacheProvider = {
   async get<T>(key: string): Promise<T | null> {
-    const entry = memoryCache.get(key);
-
-    if (!entry) {
-      return null;
-    }
-
-    if (entry.expiresAt <= Date.now()) {
-      memoryCache.delete(key);
-      return null;
-    }
-
-    return entry.value as T;
+    const cached = await getRedisClient().getBuffer(key);
+    return cached === null ? null : (deserialize(cached) as T);
   },
 
   async set(key: string, value: unknown, ttlInSeconds = TimeInSeconds.HOUR) {
-    memoryCache.set(key, {
-      value,
-      expiresAt: Date.now() + Math.max(0, ttlInSeconds) * 1_000,
-    });
+    if (ttlInSeconds <= 0) return;
+
+    await getRedisClient().set(
+      key,
+      serializeCacheValue(value),
+      "EX",
+      Math.ceil(ttlInSeconds),
+    );
   },
 
   async del(key: string) {
-    memoryCache.delete(key);
+    await getRedisClient().del(key);
   },
 };
 
-let globalCacheProvider: CacheProvider = defaultCacheProvider;
+let globalCacheProvider: CacheProvider = redisCacheProvider;
 
 export function setGlobalCacheProvider(provider: CacheProvider): void {
   globalCacheProvider = provider;
 }
 
 export function resetGlobalCache(): void {
-  memoryCache.clear();
   inFlight.clear();
-  globalCacheProvider = defaultCacheProvider;
+  globalCacheProvider = redisCacheProvider;
+}
+
+function getRedisClient(): Redis {
+  const currentUrl = process.env.REDIS_URL;
+
+  if (!currentUrl) {
+    throw new Error("REDIS_URL is not configured");
+  }
+
+  if (redisClient && redisUrl === currentUrl) {
+    return redisClient;
+  }
+
+  redisClient?.disconnect();
+  redisUrl = currentUrl;
+  redisClient = new Redis(currentUrl, {
+    connectTimeout: 3_000,
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+  });
+  redisClient.on("error", () => {
+    // Cache operations report failures at the decorator boundary.
+  });
+
+  return redisClient;
 }
 
 interface CacheableOptions {
