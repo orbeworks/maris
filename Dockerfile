@@ -12,10 +12,24 @@ COPY apps/api apps/api
 RUN pnpm --filter @maris/api build \
     && pnpm --filter @maris/api deploy --prod /app/runtime-api
 
-FROM ghcr.io/orbeworks/maris-runtime:node22-bookworm-v1@sha256:67eeaf169dbea7908f51e9b05ea213fa69337061ec52480ad74765fb53bb93f9 AS runtime
+FROM node:22-bookworm-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gdal-bin python3-venv unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/runtime/requirements.txt /tmp/requirements-runtime.txt
+RUN python3 -m venv /opt/maris-python \
+    && /opt/maris-python/bin/pip install --no-cache-dir --upgrade pip \
+    && /opt/maris-python/bin/pip install --no-cache-dir -r /tmp/requirements-runtime.txt \
+    && /opt/maris-python/bin/python -c "import eccodes, pmtiles" \
+    && ogr2ogr --version \
+    && rm /tmp/requirements-runtime.txt
 
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    GFS_PARSER_PYTHON=/opt/maris-python/bin/python \
+    PMTILES_PYTHON=/opt/maris-python/bin/python
 
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY --from=build /app/runtime-api/node_modules apps/api/node_modules
