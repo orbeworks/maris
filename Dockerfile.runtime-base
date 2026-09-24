@@ -8,6 +8,8 @@ COPY docker/runtime/requirements.txt /tmp/requirements-runtime.txt
 RUN python3 -m venv /opt/maris-python \
     && /opt/maris-python/bin/pip install --no-cache-dir --upgrade pip \
     && /opt/maris-python/bin/pip install --no-cache-dir -r /tmp/requirements-runtime.txt \
+    && /opt/maris-python/bin/python -c "import eccodes, pmtiles" \
+    && ogr2ogr --version \
     && rm /tmp/requirements-runtime.txt
 
 ENV GFS_PARSER_PYTHON=/opt/maris-python/bin/python \
