@@ -246,13 +246,20 @@ correção, a fila publicou a versão e limpou os temporários.
 ### Deploy automático da API
 
 O serviço `api` do projeto Railway `maris`, ambiente `production`, acompanha
-`andre-fig/maris`, branch `main`, via integração GitHub. Os watch paths estão
+`orbeworks/maris`, branch `main`, via integração GitHub. Os watch paths estão
 configurados diretamente no serviço: `/apps/api/**`, `/ops/**`, `/Dockerfile`,
 `/.dockerignore`, `/railway.json`, `/package.json`, `/pnpm-lock.yaml`,
 `/pnpm-workspace.yaml` e `/apps/mobile/package.json` (copiado pelo Dockerfile).
 Mudanças somente no código/telas mobile ou no TODO não disparam deploy da API.
 Os filtros não dependem do `railway.json`: a API atual do Railway rejeita
 novas configurações desse arquivo legado em favor de Infrastructure as Code.
+
+O runtime parte de `ghcr.io/orbeworks/maris-runtime:node22-bookworm-v1`,
+publicado pelo workflow `runtime-base.yml`. Essa imagem concentra GDAL, `unzip`
+e um único ambiente Python com `eccodes` e `pmtiles`, evitando reinstalá-los a
+cada deploy. O container da API não usa nginx: o Nest escuta diretamente a
+porta fornecida pela Railway, e o limite de upload é aplicado pelo Multer.
+Somente dependências Node de produção são copiadas para a imagem final.
 
 Para gerar/testar PMTiles localmente:
 

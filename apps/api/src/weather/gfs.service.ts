@@ -174,6 +174,7 @@ export class GfsService {
     );
   }
 
+  @Cacheable()
   async getCurrentForecast(now = new Date()): Promise<CurrentGfsForecast> {
     const inventory = await this.findCompleteInventory([0]);
     const runAtMs = Date.parse(inventory.run.runAt);
@@ -363,6 +364,7 @@ export class GfsService {
     return longitude < 0 ? longitude + 360 : longitude;
   }
 
+  @Cacheable()
   private async findCompleteInventory(
     forecastHours: number[],
   ): Promise<Inventory> {

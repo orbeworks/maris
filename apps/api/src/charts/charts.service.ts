@@ -32,7 +32,9 @@ export class ChartsService {
     private readonly catalog: ChartCatalogService = undefined as never,
   ) {}
 
-  @Cacheable({ ttl: TimeInSeconds.DAY })
+  @Cacheable({
+    ttl: TimeInSeconds.DAY,
+  })
   async atPoint(query: ChartQueryDto): Promise<ChartInformationDto> {
     const catalogRevision = query.version
       ? /^catalog-(\d+)$/.exec(query.version)?.[1]
