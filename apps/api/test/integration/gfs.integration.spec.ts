@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { test } from "node:test";
 
-import { GfsService } from "./gfs.service.js";
+import { GfsService } from "../../src/weather/gfs.service.js";
 
 const runRealTest = process.env.RUN_GFS_INTEGRATION === "1";
 

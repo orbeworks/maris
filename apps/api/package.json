@@ -16,9 +16,11 @@
     "migration:show": "TS_NODE_TRANSPILE_ONLY=true typeorm-ts-node-esm -d src/database/data-source.ts migration:show",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:gfs": "RUN_GFS_INTEGRATION=1 tsx --test src/weather/gfs.integration.spec.ts",
+    "test:gfs": "RUN_GFS_INTEGRATION=1 tsx --test test/integration/gfs.integration.spec.ts",
     "pretest": "node scripts/ensure-pmtiles-python.mjs",
-    "test": "tsx --test src/ingestions/services/*.spec.ts src/weather/*.spec.ts src/charts/*.spec.ts src/charts/models/*.spec.ts test/*.e2e-spec.ts"
+    "test": "tsx --test src/ingestions/services/*.spec.ts src/weather/*.spec.ts src/charts/*.spec.ts src/charts/models/*.spec.ts",
+    "test:e2e": "tsx --test test/*.e2e-spec.ts",
+    "test:integration": "RUN_GFS_INTEGRATION=1 tsx --test test/integration/*.integration.spec.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1135.0",
