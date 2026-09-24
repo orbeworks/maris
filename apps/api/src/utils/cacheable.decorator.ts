@@ -6,25 +6,36 @@ interface CacheProvider {
   del?(key: string): Promise<unknown>;
 }
 
-type MemoryEntry = { value: unknown; expiresAt: number };
+type MemoryEntry = {
+  value: unknown;
+  expiresAt: number;
+};
 
 const memoryCache = new Map<string, MemoryEntry>();
+
 const defaultCacheProvider: CacheProvider = {
   async get<T>(key: string): Promise<T | null> {
     const entry = memoryCache.get(key);
-    if (!entry) return null;
+
+    if (!entry) {
+      return null;
+    }
+
     if (entry.expiresAt <= Date.now()) {
       memoryCache.delete(key);
       return null;
     }
+
     return entry.value as T;
   },
+
   async set(key: string, value: unknown, ttlInSeconds = 60 * 60) {
     memoryCache.set(key, {
       value,
       expiresAt: Date.now() + Math.max(0, ttlInSeconds) * 1_000,
     });
   },
+
   async del(key: string) {
     memoryCache.delete(key);
   },
@@ -44,16 +55,30 @@ interface CacheableOptions {
   ttl?: number;
 
   /**
-   * Função que gera a chave do cache com base nos argumentos.
+   * Função que gera a parte variável da chave com base nos argumentos.
    *
-   * string -> chave pronta
-   * array  -> hash do array exatamente na ordem recebida
+   * string -> usa a string diretamente após o prefixo
+   * array  -> gera hash do array exatamente na ordem recebida
+   *
+   * Exemplos:
+   *
+   * key: (_, id) => id
+   * UserService:getUser:123
+   *
+   * key: (_, z, x, y) => [z, x, y]
+   * WeatherService:getTile:<hash>
    */
   key?: (...args: unknown[]) => string | unknown[];
 
   /**
    * Prefixo da chave.
-   * Se não informado, usa o nome do método.
+   *
+   * Se não informado, usa:
+   *
+   * NomeDaClasse:nomeDoMetodo
+   *
+   * Exemplo:
+   * GfsService:getXyzTileFromInventory
    */
   keyPrefix?: string;
 }
@@ -62,7 +87,7 @@ export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
   const { ttl = 60 * 60, key, keyPrefix } = options;
 
   return function (
-    _target: object,
+    target: object,
     propertyKey: string | symbol,
     descriptor: PropertyDescriptor,
   ): PropertyDescriptor {
@@ -74,8 +99,13 @@ export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
       );
     }
 
+    const className = target.constructor.name;
+    const methodName = String(propertyKey);
+    const defaultKeyPrefix = `${className}:${methodName}`;
+    const resolvedKeyPrefix = keyPrefix ?? defaultKeyPrefix;
+
     descriptor.value = async function (...args: unknown[]) {
-      const cacheKey = generateCacheKey(key, keyPrefix, propertyKey, args);
+      const cacheKey = generateCacheKey(key, resolvedKeyPrefix, args);
 
       try {
         const cached = await globalCacheProvider.get(cacheKey);
@@ -102,38 +132,65 @@ export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
 
 function generateCacheKey(
   keyFn: CacheableOptions["key"],
-  keyPrefix: string | undefined,
-  propertyKey: string | symbol,
+  keyPrefix: string,
   args: unknown[],
 ): string {
   if (keyFn) {
     const rawKey = keyFn(...args);
 
     if (typeof rawKey === "string") {
-      return rawKey;
+      return `${keyPrefix}:${rawKey}`;
     }
 
-    return `${keyPrefix ?? String(propertyKey)}:${hash(rawKey)}`;
+    return `${keyPrefix}:${hash(rawKey)}`;
   }
 
-  return `${keyPrefix ?? String(propertyKey)}:${hash(args)}`;
+  return `${keyPrefix}:${hash(args)}`;
 }
 
 function hash(value: unknown): string {
-  return createHash("sha256")
-    .update(serialize(value))
-    .digest("hex");
+  return createHash("sha256").update(serialize(value)).digest("hex");
 }
 
 function serialize(value: unknown): string {
   const seen = new WeakSet<object>();
+
   return JSON.stringify(value, (_key, current: unknown) => {
-    if (typeof current === "bigint") return `${current}n`;
-    if (typeof current !== "object" || current === null) return current;
-    if (seen.has(current)) return "[Circular]";
+    if (typeof current === "bigint") {
+      return `${current}n`;
+    }
+
+    if (typeof current !== "object" || current === null) {
+      return current;
+    }
+
+    if (seen.has(current)) {
+      return "[Circular]";
+    }
+
     seen.add(current);
-    if (current instanceof Uint8Array)
-      return { type: current.constructor.name, values: [...current] };
+
+    if (current instanceof Uint8Array) {
+      return {
+        type: current.constructor.name,
+        values: [...current],
+      };
+    }
+
+    if (current instanceof Set) {
+      return {
+        type: "Set",
+        values: [...current],
+      };
+    }
+
+    if (current instanceof Map) {
+      return {
+        type: "Map",
+        entries: [...current.entries()],
+      };
+    }
+
     return current;
   });
 }
