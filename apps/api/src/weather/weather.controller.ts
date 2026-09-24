@@ -4,7 +4,6 @@ import {
   Get,
   Inject,
   Param,
-  Optional,
   Query,
   Req,
   Res,
@@ -15,11 +14,6 @@ import { gzipSync } from "node:zlib";
 
 import { GfsService } from "./gfs.service.js";
 import { encodeGfsTile } from "./gfs-tile-codec.js";
-import {
-  GfsRedisCacheService,
-  gfsCurrentRunId,
-  gfsRunId,
-} from "./gfs-redis-cache.service.js";
 import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./xyz-tiles.js";
 
 const GFS_SUCCESS_CACHE_CONTROL =
@@ -39,12 +33,7 @@ function isNotModified(request: Request, etag: string) {
 
 @Controller("weather")
 export class WeatherController {
-  constructor(
-    @Inject(GfsService) private readonly gfsService: GfsService,
-    @Optional()
-    @Inject(GfsRedisCacheService)
-    private readonly redisCache?: GfsRedisCacheService,
-  ) {}
+  constructor(@Inject(GfsService) private readonly gfsService: GfsService) {}
 
   @Get("gfs/tiles/:z/:x/:y")
   async getGfsTile(
@@ -79,53 +68,31 @@ export class WeatherController {
         "Invalid GFS tile coordinate or forecast hour",
       );
     }
-    let body: Buffer | null | undefined;
+    let body: Buffer;
     if (forecastHour === 0) {
       const current = await this.gfsService.getCurrentForecast();
-      const cacheRun = gfsCurrentRunId(
-        current.inventory.run.runAt,
+      const source = await this.gfsService.getXyzTileFromInventory(
+        current.inventory,
+        z,
+        x,
+        y,
         current.sourceForecastHour,
       );
-      body = await this.redisCache?.getTile(cacheRun, 0, x, y, z);
-      if (!body) {
-        const source = await this.gfsService.getXyzTileFromInventory(
-          current.inventory,
-          z,
-          x,
-          y,
-          current.sourceForecastHour,
-        );
-        // `0` remains the mobile contract for "current". forecastTime retains
-        // the actual GFS valid time selected by the API.
-        body = gzipSync(encodeGfsTile({ ...source, forecastHour: 0 }));
-        await this.redisCache?.setTile(cacheRun, 0, x, y, body, z);
-      }
+      // `0` remains the mobile contract for "current". forecastTime retains
+      // the actual GFS valid time selected by the API.
+      body = gzipSync(encodeGfsTile({ ...source, forecastHour: 0 }));
     } else {
-      const activeRun = await this.redisCache?.getActiveRun();
-      body = activeRun
-        ? await this.redisCache?.getTile(activeRun.run, forecastHour, x, y, z)
-        : null;
-      if (!body) {
-        const inventory = await this.gfsService.getCompleteInventory([
-          forecastHour,
-        ]);
-        const grid = await this.gfsService.getXyzTileFromInventory(
-          inventory,
-          z,
-          x,
-          y,
-          forecastHour,
-        );
-        body = gzipSync(encodeGfsTile(grid));
-        await this.redisCache?.setTile(
-          gfsRunId(grid.run),
-          forecastHour,
-          x,
-          y,
-          body,
-          z,
-        );
-      }
+      const inventory = await this.gfsService.getCompleteInventory([
+        forecastHour,
+      ]);
+      const grid = await this.gfsService.getXyzTileFromInventory(
+        inventory,
+        z,
+        x,
+        y,
+        forecastHour,
+      );
+      body = gzipSync(encodeGfsTile(grid));
     }
     const etag = etagFor(body);
     response.set("Cache-Control", GFS_SUCCESS_CACHE_CONTROL);

@@ -82,32 +82,24 @@ test("GET /weather/gfs/tiles/:z/:x/:y returns a compressed deterministic tile", 
   assert.equal(decoded.header.width, 2);
 });
 
-test("current GFS tile Redis HIT avoids downloading and encoding the source tile", async () => {
+test("current GFS tile is fetched directly from the GFS service", async () => {
   let sourceTileCalls = 0;
-  const cachedBody = Buffer.from("cached-gfs-tile");
   const tile = makeTestTile();
   const inventory = {
     run: { runAt: tile.run },
     files: new Set(["gfs.t12z.pgrb2.0p25.f004"]),
   };
-  const controller = new WeatherController(
-    {
-      getCurrentForecast: async () => ({
-        inventory,
-        sourceForecastHour: 4,
-        validTime: "2026-09-18T16:00:00.000Z",
-      }),
-      getXyzTileFromInventory: async () => {
-        sourceTileCalls += 1;
-        throw new Error("source tile should not be downloaded on a Redis HIT");
-      },
-    } as GfsService,
-    {
-      getActiveRun: async () => ({ run: "20260918T12", status: "READY" }),
-      getTile: async () => cachedBody,
-      setTile: async () => true,
-    } as never,
-  );
+  const controller = new WeatherController({
+    getCurrentForecast: async () => ({
+      inventory,
+      sourceForecastHour: 4,
+      validTime: "2026-09-18T16:00:00.000Z",
+    }),
+    getXyzTileFromInventory: async () => {
+      sourceTileCalls += 1;
+      return { ...tile, forecastHour: 4 };
+    },
+  } as GfsService);
   const headers = new Map<string, string>();
   const response = {
     set: (name: string, value: string) => headers.set(name, value),
@@ -124,8 +116,8 @@ test("current GFS tile Redis HIT avoids downloading and encoding the source tile
     response,
   );
 
-  assert.equal(sourceTileCalls, 0);
-  assert.equal(body, cachedBody);
+  assert.equal(sourceTileCalls, 1);
+  assert.equal(decodeGfsTile(gunzipSync(body)).header.forecastHour, 0);
   assert.match(headers.get("ETag") ?? "", /^"[0-9a-f]{64}"$/);
 });
 
