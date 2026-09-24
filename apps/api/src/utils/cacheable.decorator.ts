@@ -1,5 +1,4 @@
-import { createHash } from "crypto";
-import CircularJSON from "circular-json";
+import { createHash } from "node:crypto";
 
 interface CacheProvider {
   get<T = unknown>(key: string): Promise<T | null>;
@@ -7,7 +6,31 @@ interface CacheProvider {
   del?(key: string): Promise<unknown>;
 }
 
-let globalCacheProvider: CacheProvider | null = null;
+type MemoryEntry = { value: unknown; expiresAt: number };
+
+const memoryCache = new Map<string, MemoryEntry>();
+const defaultCacheProvider: CacheProvider = {
+  async get<T>(key: string): Promise<T | null> {
+    const entry = memoryCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      memoryCache.delete(key);
+      return null;
+    }
+    return entry.value as T;
+  },
+  async set(key: string, value: unknown, ttlInSeconds = 60 * 60) {
+    memoryCache.set(key, {
+      value,
+      expiresAt: Date.now() + Math.max(0, ttlInSeconds) * 1_000,
+    });
+  },
+  async del(key: string) {
+    memoryCache.delete(key);
+  },
+};
+
+let globalCacheProvider: CacheProvider = defaultCacheProvider;
 
 export function setGlobalCacheProvider(provider: CacheProvider): void {
   globalCacheProvider = provider;
@@ -52,12 +75,6 @@ export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
     }
 
     descriptor.value = async function (...args: unknown[]) {
-      if (!globalCacheProvider) {
-        throw new Error(
-          "Você precisa configurar um provider de cache global usando setGlobalCacheProvider().",
-        );
-      }
-
       const cacheKey = generateCacheKey(key, keyPrefix, propertyKey, args);
 
       try {
@@ -104,8 +121,21 @@ function generateCacheKey(
 
 function hash(value: unknown): string {
   return createHash("sha256")
-    .update(CircularJSON.stringify(value))
+    .update(serialize(value))
     .digest("hex");
+}
+
+function serialize(value: unknown): string {
+  const seen = new WeakSet<object>();
+  return JSON.stringify(value, (_key, current: unknown) => {
+    if (typeof current === "bigint") return `${current}n`;
+    if (typeof current !== "object" || current === null) return current;
+    if (seen.has(current)) return "[Circular]";
+    seen.add(current);
+    if (current instanceof Uint8Array)
+      return { type: current.constructor.name, values: [...current] };
+    return current;
+  });
 }
 
 async function storeInCache(
