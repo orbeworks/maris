@@ -45,7 +45,7 @@ test("repeated native camera events settle without a render/command feedback loo
           else if (name === "@maris/native-wind") contents = 'export const NativeWindLayer="NativeWindLayer";';
           else if (name.includes("/location/")) contents = 'export const useDeviceLocation=()=>({coordinate:[-80.15,25.7],heading:globalThis.__cameraFeedback.heading});';
           else if (name.endsWith("wind-legend-band")) contents = 'export const windLegendBand=x=>x;';
-          else if (name.includes("/weather/")) contents = 'export const useGfsViewport=()=>({current:null,loading:true});';
+          else if (name.includes("/weather/")) contents = 'export const useGfsViewport=()=>({current:null,loading:true}),useGfsPoint=()=>({current:null,loading:true});';
           else if (name.endsWith("use-automatic-offline")) contents = 'export const useAutomaticOffline=()=>({ready:true,area:null,onViewportSettled:async()=>{}});';
           else if (name.endsWith("MapOverlayGrid")) contents = 'export const MapOverlayGrid="MapOverlayGrid",MapOverlaySlot="MapOverlaySlot";';
           else if (name.endsWith("NavigationDataPanel")) contents = 'export const NavigationDataPanel="NavigationDataPanel",GfsConditionsPanel="GfsConditionsPanel";';

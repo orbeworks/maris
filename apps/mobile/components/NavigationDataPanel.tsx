@@ -135,7 +135,7 @@ export function GfsConditionsPanel({ sample }: { sample?: GfsConditionsSample })
     {
       ...WEATHER_CONDITIONS_DATA[2],
       value: hasWind ? `${windKt.toFixed(0)} · ${cardinal}` : "",
-      unit: hasWind ? "kt" : "",
+      unit: "kt",
       loading: !hasWind,
     },
     WEATHER_CONDITIONS_DATA[3],

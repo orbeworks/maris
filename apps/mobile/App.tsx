@@ -38,7 +38,7 @@ import { useAutomaticOffline } from "./offline/use-automatic-offline";
 import { DEFAULT_MAP_ZOOM } from "./map-config";
 import { useChartInformation, useOnlineChart } from "./charts/current-chart";
 import { chartInformationRows } from "./charts/chart-information";
-import { useGfsViewport } from "./weather/gfs-client";
+import { useGfsPoint, useGfsViewport } from "./weather/gfs-client";
 import { viewportTileCoverage } from "./map/viewport-tile-coverage";
 import type { GfsBounds, MapCenter } from "./weather/gfs-grid";
 
@@ -199,6 +199,12 @@ export default function App() {
     visibleBounds,
     [viewState.longitude, viewState.latitude],
     viewState.zoom,
+    offlineReady,
+  );
+  const centerGfs = useGfsPoint(
+    API_URL,
+    [viewState.longitude, viewState.latitude],
+    DEFAULT_MAP_ZOOM,
     offlineReady,
   );
   const windViewportCoverage = useMemo(
@@ -572,7 +578,7 @@ export default function App() {
           <CenterCoordinatesPanel latitude={viewState.latitude} longitude={viewState.longitude} />
         </MapOverlaySlot>
         <MapOverlaySlot column={0} row={0} columnSpan={6} rowSpan={5} alignItems="stretch" justifyContent="flex-start">
-          <GfsConditionsPanel sample={gfs.current} />
+          <GfsConditionsPanel sample={centerGfs.current ?? undefined} />
         </MapOverlaySlot>
       </MapOverlayGrid>
       <BlurBottomSheet

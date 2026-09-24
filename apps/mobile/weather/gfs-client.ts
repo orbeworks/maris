@@ -20,6 +20,7 @@ import {
 } from './gfs-tiles';
 import {
   DEFAULT_MAX_FIELD_DIMENSION,
+  sourceZoomForMapZoom,
   sourceZoomForViewport,
 } from './gfs-zoom';
 
@@ -266,6 +267,87 @@ export function sampleGfsPackageAtCoordinate(packageData: GfsPackage | null | un
     const sampled = sampleGridAtCoordinate(grid, coordinate[1], coordinate[0]);
     return sampled ? { ...sampled, forecastTime: grid.forecastTime, forecastHour } : null;
   }).filter((sample): sample is GfsSample => sample !== null);
+}
+
+/** Loads and samples the tile containing one coordinate at a stable zoom. */
+export function useGfsPoint(
+  apiUrl: string,
+  coordinate: MapCenter | null,
+  mapZoom: number,
+  enabled = true,
+) {
+  const sourceZoom = sourceZoomForMapZoom(mapZoom);
+  const targetTile = useMemo(
+    () => coordinate
+      ? tileForCoordinate(coordinate[0], coordinate[1], sourceZoom)
+      : null,
+    [coordinate?.[0], coordinate?.[1], sourceZoom],
+  );
+  const targetKey = targetTile ? tileKey(targetTile, 0) : '';
+  const [loaded, setLoaded] = useState<CachedTile | null>(null);
+  const [loading, setLoading] = useState(enabled);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!enabled || !targetTile) {
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    setLoading(true);
+    setError(undefined);
+
+    const load = async () => {
+      try {
+        const result = await fetchGfsTile(apiUrl, targetTile, 0);
+        if (cancelled) return;
+        setLoaded(result);
+        setLoading(false);
+      } catch (cause) {
+        if (cancelled) return;
+        setError(cause instanceof Error ? cause.message : String(cause));
+        retryTimer = setTimeout(() => void load(), REQUEST_RETRY_DELAY_MS);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [apiUrl, enabled, targetKey]);
+
+  const current = useMemo<GfsSample | null>(() => {
+    if (!coordinate || !targetTile || !loaded) return null;
+    if (
+      loaded.tile.z !== targetTile.z ||
+      loaded.tile.x !== targetTile.x ||
+      loaded.tile.y !== targetTile.y
+    ) return null;
+    const sampled = sampleGridAtCoordinate(
+      loaded.grid,
+      coordinate[1],
+      coordinate[0],
+    );
+    return sampled
+      ? {
+          ...sampled,
+          forecastTime: loaded.grid.forecastTime,
+          forecastHour: loaded.grid.forecastHour,
+        }
+      : null;
+  }, [coordinate?.[0], coordinate?.[1], loaded, targetKey]);
+
+  return {
+    current,
+    loading,
+    error,
+    offline: loaded?.source === 'cache',
+    cachedAt: loaded?.savedAt,
+    sourceZoom,
+  };
 }
 
 export function useGfsViewport(

@@ -54,7 +54,7 @@ test("course up activates before heading is available and follows north without 
           else if (args.path === "@maplibre/maplibre-react-native") contents = `import React from "react"; export const Camera=React.forwardRef((props,ref)=>{React.useImperativeHandle(ref,()=>globalThis.__courseUp.camera);return null}); export const Map="Map", Layer="Layer", VectorSource="VectorSource", OfflineManager={setMaximumAmbientCacheSize:()=>Promise.resolve()};`;
           else if (args.path === "@maris/native-wind") contents = 'export const NativeWindLayer="NativeWindLayer";';
           else if (args.path.includes("/location/")) contents = 'export const useDeviceLocation=()=>globalThis.__courseUp.location;';
-          else if (args.path.includes("/weather/")) contents = 'export const useGfsViewport=()=>({current:null,loading:true});';
+          else if (args.path.includes("/weather/")) contents = 'export const useGfsViewport=()=>({current:null,loading:true}),useGfsPoint=()=>({current:null,loading:true});';
           else if (args.path.endsWith('/offline/use-automatic-offline')) contents = 'export const useAutomaticOffline=()=>({ready:true,area:null,onViewportSettled:async()=>{}});';
           else if (args.path.endsWith('MapOverlayGrid')) contents = 'export const MapOverlayGrid="MapOverlayGrid",MapOverlaySlot="MapOverlaySlot";';
           else if (args.path.endsWith('NavigationDataPanel')) contents = 'export const NavigationDataPanel="NavigationDataPanel",GfsConditionsPanel="GfsConditionsPanel";';

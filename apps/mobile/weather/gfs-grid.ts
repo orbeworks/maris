@@ -57,7 +57,9 @@ export type GfsPackage = {
   grids: Record<string, GfsGrid>;
 };
 
-export type SampledGfsValues = Record<string, number | null>;
+export type SampledGfsValues = Partial<
+  Record<GfsFieldName, number | null>
+>;
 
 function isFiniteNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -110,7 +112,7 @@ export function sampleGridAtCoordinate(
 ): SampledGfsValues | null {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   const result: SampledGfsValues = {};
-  for (const field of Object.keys(grid.fields)) {
+  for (const field of Object.keys(grid.fields) as GfsFieldName[]) {
     result[field] = sampleField(grid, field, latitude, longitude);
   }
   return Object.keys(result).length && Object.values(result).some(isFiniteNumber)
