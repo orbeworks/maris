@@ -24,6 +24,8 @@ import {
   webMercatorTileBounds,
   xyzTileCount,
 } from "./xyz-tiles.js";
+import { Cacheable } from "../utils/cacheable.decorator.js";
+import { TimeInSeconds } from "../utils/time-in-seconds.enum.js";
 
 const execFileAsync = promisify(execFile);
 const gzipAsync = promisify(gzip);
@@ -218,7 +220,7 @@ export class GfsService {
     return { inventory, sourceForecastHour, validTime };
   }
 
-  async getTileFromInventory(
+  private async getTileFromInventory(
     inventory: Inventory,
     x: number,
     y: number,
@@ -242,6 +244,7 @@ export class GfsService {
     );
   }
 
+  @Cacheable({ ttl: TimeInSeconds.HOUR })
   async getXyzTileFromInventory(
     inventory: Inventory,
     z: number,
