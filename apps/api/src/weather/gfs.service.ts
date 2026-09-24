@@ -158,6 +158,7 @@ export class GfsService {
 
   constructor(private readonly config: ConfigService) {}
 
+  @Cacheable()
   async getTile(x: number, y: number, forecastHour: number): Promise<GfsGrid> {
     const bounds = gfsTileBounds(x, y);
 
@@ -257,7 +258,6 @@ export class GfsService {
     };
   }
 
-  @Cacheable()
   private async getTileFromInventory(
     inventory: Inventory,
     x: number,
@@ -435,7 +435,6 @@ export class GfsService {
     return longitude < 0 ? longitude + 360 : longitude;
   }
 
-  @Cacheable()
   private async findCompleteInventory(
     forecastHours: number[],
   ): Promise<Inventory> {
