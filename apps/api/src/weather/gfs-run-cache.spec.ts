@@ -1,17 +1,14 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 
+import { resetGlobalCache } from "../utils/cacheable.decorator.js";
 import { GfsService } from "./gfs.service.js";
 
 type InventoryLookup = (hours: number[]) => Promise<unknown>;
 
-function serviceWithTtl(
-  ttlMs = 5 * 60 * 1_000,
-  negativeTtlMs = 3 * 60 * 1_000,
-) {
+function serviceWithNegativeTtl(negativeTtlMs = 3 * 60 * 1_000) {
   return new GfsService({
     get<T>(key: string, fallback?: T) {
-      if (key === "GFS_RUN_CACHE_TTL_MS") return ttlMs as T;
       if (key === "GFS_NEGATIVE_RUN_CACHE_TTL_MS") return negativeTtlMs as T;
       return fallback as T;
     },
@@ -32,8 +29,12 @@ async function lookup(service: GfsService, hours: number[]) {
   ).findCompleteInventory(hours);
 }
 
+beforeEach(() => {
+  resetGlobalCache();
+});
+
 test("first run lookup misses, stores, and the next tile lookup hits memory", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -54,8 +55,8 @@ test("first run lookup misses, stores, and the next tile lookup hits memory", as
   }
 });
 
-test("multiple forecast-hour requests reuse a cached run when its files support them", async () => {
-  const service = serviceWithTtl();
+test("different forecast-hour requests use distinct cache entries", async () => {
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -69,14 +70,14 @@ test("multiple forecast-hour requests reuse a cached run when its files support 
   try {
     await lookup(service, [0]);
     await lookup(service, [3]);
-    assert.equal(calls, 1);
+    assert.equal(calls, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-test("expired run cache performs a new inventory lookup", async () => {
-  const service = serviceWithTtl(1);
+test("clearing the process cache performs a new inventory lookup", async () => {
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -89,7 +90,8 @@ test("expired run cache performs a new inventory lookup", async () => {
   };
   try {
     await lookup(service, [0]);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await lookup(service, [0]);
+    resetGlobalCache();
     await lookup(service, [0]);
     assert.equal(calls, 2);
   } finally {
@@ -98,7 +100,7 @@ test("expired run cache performs a new inventory lookup", async () => {
 });
 
 test("invalid inventory is not stored as a valid run", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -116,7 +118,7 @@ test("invalid inventory is not stored as a valid run", async () => {
 });
 
 test("an unavailable latest run is skipped and an older run can be used", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -140,7 +142,7 @@ test("an unavailable latest run is skipped and an older run can be used", async 
 });
 
 test("negative cache expiry allows a previously unavailable run to be retried", async () => {
-  const service = serviceWithTtl(1, 1);
+  const service = serviceWithNegativeTtl(1);
   const originalFetch = globalThis.fetch;
   let calls = 0;
   let shouldFail = true;
@@ -165,7 +167,7 @@ test("negative cache expiry allows a previously unavailable run to be retried", 
 });
 
 test("a cached valid run remains available and is not replaced by an invalid lookup", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let valid = true;
   let calls = 0;
@@ -191,7 +193,7 @@ test("a cached valid run remains available and is not replaced by an invalid loo
 });
 
 test("concurrent cache misses share one run discovery", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -215,7 +217,7 @@ test("concurrent cache misses share one run discovery", async () => {
 });
 
 test("a failed single-flight discovery is shared and cleared for a later retry", async () => {
-  const service = serviceWithTtl(5 * 60 * 1_000, 1);
+  const service = serviceWithNegativeTtl(1);
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -239,7 +241,7 @@ test("a failed single-flight discovery is shared and cleared for a later retry",
 });
 
 test("run candidates never include a future cycle", () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const candidates = (
     service as unknown as {
       candidateRuns: (now: Date) => Array<{ dateText: string; cycle: number }>;
@@ -281,7 +283,7 @@ test("run candidates never include a future cycle", () => {
 });
 
 test("current forecast resolves hour zero to the closest UTC valid time", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const inventory = {
     run: {
       date: "20260920",
@@ -313,7 +315,7 @@ test("current forecast resolves hour zero to the closest UTC valid time", async 
 });
 
 test("current forecast breaks an exact tie toward the earlier valid time", async () => {
-  const service = serviceWithTtl();
+  const service = serviceWithNegativeTtl();
   const inventory = {
     run: {
       date: "20260920",

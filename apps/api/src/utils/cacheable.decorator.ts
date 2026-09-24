@@ -13,6 +13,7 @@ type MemoryEntry = {
 };
 
 const memoryCache = new Map<string, MemoryEntry>();
+const inFlight = new Map<string, Promise<unknown>>();
 
 const defaultCacheProvider: CacheProvider = {
   async get<T>(key: string): Promise<T | null> {
@@ -46,6 +47,12 @@ let globalCacheProvider: CacheProvider = defaultCacheProvider;
 
 export function setGlobalCacheProvider(provider: CacheProvider): void {
   globalCacheProvider = provider;
+}
+
+export function resetGlobalCache(): void {
+  memoryCache.clear();
+  inFlight.clear();
+  globalCacheProvider = defaultCacheProvider;
 }
 
 interface CacheableOptions {
@@ -120,11 +127,27 @@ export function Cacheable(options: CacheableOptions = {}): MethodDecorator {
         );
       }
 
-      const result = await originalMethod.apply(this, args);
+      const pending = inFlight.get(cacheKey);
 
-      await storeInCache(globalCacheProvider, cacheKey, result, ttl);
+      if (pending) {
+        return pending;
+      }
 
-      return result;
+      const execution = (async () => {
+        try {
+          const result = await originalMethod.apply(this, args);
+
+          await storeInCache(globalCacheProvider, cacheKey, result, ttl);
+
+          return result;
+        } finally {
+          inFlight.delete(cacheKey);
+        }
+      })();
+
+      inFlight.set(cacheKey, execution);
+
+      return execution;
     };
 
     return descriptor;
