@@ -1,7 +1,5 @@
 import type { AndroidSymbol, SFSymbol } from "expo-symbols";
 
-const MIN_RAIN_RATE_MM_H = 0.1;
-
 export type WeatherIcon =
   | "CLEAR_DAY"
   | "CLEAR_NIGHT"

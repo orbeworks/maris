@@ -16,7 +16,6 @@ import {
   tileBounds,
   tileForCoordinate,
   tileKey,
-  tilesForViewport,
   type GfsTileCoordinate,
 } from './gfs-tiles';
 import {

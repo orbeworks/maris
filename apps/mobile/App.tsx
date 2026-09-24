@@ -572,7 +572,7 @@ export default function App() {
           <CenterCoordinatesPanel latitude={viewState.latitude} longitude={viewState.longitude} />
         </MapOverlaySlot>
         <MapOverlaySlot column={0} row={0} columnSpan={6} rowSpan={5} alignItems="stretch" justifyContent="flex-start">
-          <GfsConditionsPanel sample={gfs.current} loading={gfs.loading} />
+          <GfsConditionsPanel sample={gfs.current} />
         </MapOverlaySlot>
       </MapOverlayGrid>
       <BlurBottomSheet

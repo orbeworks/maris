@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -278,43 +278,6 @@ export class EncProcessingService {
     if (Number(artifact.ContentLength ?? 0) !== expectedSize) throw new Error('Published PMTiles object failed validation');
     if (Number(manifest.ContentLength ?? 0) <= 0) throw new Error('Published PMTiles manifest is empty');
     return { artifactObjectKey, manifestObjectKey };
-  }
-
-  private async readManifestIfPresent(manifestPath: string) {
-    try {
-      return JSON.parse(
-        await readFile(
-          path.join(this.chartStorageDirectory, manifestPath),
-          'utf8',
-        ),
-      ) as GeneratedManifest;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-      throw error;
-    }
-  }
-
-  private async findFiles(directory: string): Promise<string[]> {
-    const entries = await readdir(directory, { withFileTypes: true });
-    const files: string[] = [];
-    for (const entry of entries) {
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) files.push(...(await this.findFiles(entryPath)));
-      else if (entry.isFile()) files.push(entryPath);
-    }
-    return files;
-  }
-
-  private async findUpdates(baseCell: string) {
-    const directory = path.dirname(baseCell);
-    const name = path.basename(baseCell, '.000');
-    const entries = await readdir(directory);
-    return entries
-      .map((entry) => new RegExp(`^${name}\\.(\\d{3})$`, 'i').exec(entry))
-      .filter((match): match is RegExpExecArray => Boolean(match))
-      .map((match) => Number(match[1]))
-      .filter((update) => update > 0)
-      .sort((left, right) => left - right);
   }
 
   async readCellMetadata(cell: string) {

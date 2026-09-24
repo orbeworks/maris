@@ -1,10 +1,10 @@
 # NOAA/NCEP GFS 0.25° backend
 
-The API endpoint `GET /weather/gfs` downloads and normalizes a small NOMADS
-Grib Filter subset. Example:
+The API endpoint `GET /weather/gfs/tiles/:z/:x/:y` downloads and normalizes the
+NOMADS Grib Filter subsets needed for one XYZ tile. Example:
 
 ```text
-/weather/gfs?north=-22&south=-23&east=-43&west=-44&forecastHours=0,3,6
+/weather/gfs/tiles/6/24/36?forecastHour=0
 ```
 
 The backend, not the React Native app, performs the GRIB2 parsing. A selected
@@ -15,9 +15,8 @@ silently mixed.
 
 ## Normalized grid
 
-Each forecast hour is cached as a gzip-compressed JSON grid. Arrays are
-row-major, with rows ordered north-to-south and columns west-to-east. The
-backend keeps SI units:
+Each response is a gzip-compressed binary grid. Arrays are row-major, with rows
+ordered north-to-south and columns west-to-east. The backend keeps SI units:
 
 | Field | GRIB source | Level | Unit |
 | --- | --- | --- | --- |
@@ -41,20 +40,12 @@ past the `0/360` seam is rejected explicitly instead of returning a silently
 truncated subset; it can be supported later by issuing two subsets and joining
 their grids.
 
-## Cache and offline packages
+## Cache
 
-The cache key includes the selected run, forecast hour, file name, bounds and
-resolution. Files are stored under `GFS_CACHE_DIR/<run>/` as gzip-compressed
-JSON. The response shape already groups grids by forecast hour, so the same
-files can be copied into a future offline package:
-
-```text
-weather-package/
-  metadata.json
-  forecast-000.json.gz
-  forecast-003.json.gz
-  forecast-006.json.gz
-```
+The route resolves data on demand and does not prefetch or store rendered tiles
+in Redis. Downloaded source subsets are stored under `GFS_CACHE_DIR/<run>/` as
+gzip-compressed JSON so repeated requests do not need to download and parse the
+same GRIB2 subset again.
 
 ## Validation
 

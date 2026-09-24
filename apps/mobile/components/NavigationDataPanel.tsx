@@ -97,13 +97,7 @@ export function NavigationDataPanel({
   return <DataMetricsPanel items={items} />;
 }
 
-export function GfsConditionsPanel({
-  sample,
-  loading,
-}: {
-  sample?: GfsConditionsSample;
-  loading: boolean;
-}) {
+export function GfsConditionsPanel({ sample }: { sample?: GfsConditionsSample }) {
   const u = sample?.windU ?? null;
   const v = sample?.windV ?? null;
   const windKt = windSpeedKt(u, v);

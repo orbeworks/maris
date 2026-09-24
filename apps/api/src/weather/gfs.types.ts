@@ -1,5 +1,3 @@
-export const GFS_FORECAST_HOURS = [0, 3, 6, 9, 12, 18, 24, 36, 48, 72] as const;
-
 export type GfsFieldName =
   | "windU"
   | "windV"
@@ -47,14 +45,4 @@ export type GfsGrid = {
     humidity: "%";
   };
   fields: Partial<Record<GfsFieldName, Array<number | null>>>;
-};
-
-export type GfsPackage = {
-  model: "gfs";
-  run: GfsRun;
-  resolution: 0.25;
-  bounds: GfsBounds;
-  forecastHours: number[];
-  availableForecastHours: number[];
-  grids: Record<string, GfsGrid>;
 };

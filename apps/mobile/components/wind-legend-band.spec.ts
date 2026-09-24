@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import { formatWindLegendLabel, windLegendBand } from './wind-legend-band';
 
 test('legend converts speeds and preserves inequality markers without changing bands', () => {
-  assert.equal(formatWindLegendLabel('20.8', 'kn'), '40.4');
-  assert.equal(formatWindLegendLabel('>32.6', 'kn'), '>63.4');
-  assert.equal(formatWindLegendLabel('<5.4', 'kn'), '<10.5');
+  assert.equal(formatWindLegendLabel('20.8'), '40.4');
+  assert.equal(formatWindLegendLabel('>32.6'), '>63.4');
+  assert.equal(formatWindLegendLabel('<5.4'), '<10.5');
   assert.equal(windLegendBand(26.24), 2);
 });
 
