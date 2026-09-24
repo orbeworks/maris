@@ -38,4 +38,4 @@ export class IngestionDto {
 export class UploadEncDto {
   file!: Express.Multer.File;
 }
-import type { IngestionStatus } from "../models/processing.js";
+import type { IngestionStatus } from "../types/ingestion.types.js";

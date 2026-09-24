@@ -18,7 +18,7 @@ import type {
   ProcessingJob,
   ProcessingResult,
   ProcessingShard,
-} from '../models/processing.js';
+} from '../types/ingestion.types.js';
 
 const execFileAsync = promisify(execFile);
 

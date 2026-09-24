@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import type { ProcessingJob } from '../models/processing.js';
+import type { ProcessingJob } from '../types/ingestion.types.js';
 import { ProcessingDispatcherService } from './processing-dispatcher.service.js';
 
 const JOB: ProcessingJob = {

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import type { ProcessingJob } from '../models/processing.js';
+import type { ProcessingJob } from '../types/ingestion.types.js';
 import { ChartCatalogService } from './chart-catalog.service.js';
 import { IngestionPipelineService } from './ingestion-pipeline.service.js';
 import { ProcessingCleanupService } from './processing-cleanup.service.js';

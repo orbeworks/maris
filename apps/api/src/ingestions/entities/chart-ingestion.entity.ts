@@ -11,7 +11,7 @@ import {
 import type { Relation } from "typeorm";
 
 import type { EncArchiveDto } from "../dtos/ingestion.dto.js";
-import type { IngestionStatus } from "../models/processing.js";
+import type { IngestionStatus } from "../types/ingestion.types.js";
 import { ChartDataset } from "./chart-dataset.entity.js";
 import { ChartVersion } from "./chart-version.entity.js";
 

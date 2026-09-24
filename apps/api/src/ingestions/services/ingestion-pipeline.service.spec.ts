@@ -9,7 +9,7 @@ import type { ConfigService } from '@nestjs/config';
 import type {
   ProcessingJob,
   ProcessingResult,
-} from '../models/processing.js';
+} from '../types/ingestion.types.js';
 import { IngestionPipelineService } from './ingestion-pipeline.service.js';
 
 const JOB: ProcessingJob = {

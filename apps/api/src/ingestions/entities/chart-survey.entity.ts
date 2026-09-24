@@ -8,7 +8,7 @@ import {
 } from "typeorm";
 import type { Relation } from "typeorm";
 import { ChartCell } from "./chart-cell.entity.js";
-import type { EncMetadataFeature } from "../models/processing.js";
+import type { EncMetadataFeature } from "../types/ingestion.types.js";
 
 @Entity({ name: "chart_surveys" })
 @Index("chart_surveys_cell_index", ["cellId"])

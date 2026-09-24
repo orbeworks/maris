@@ -12,7 +12,7 @@ import {
 } from "typeorm";
 import type { Relation } from "typeorm";
 
-import type { IngestionStatus } from "../models/processing.js";
+import type { IngestionStatus } from "../types/ingestion.types.js";
 import { ChartCell } from "./chart-cell.entity.js";
 import { ChartDataset } from "./chart-dataset.entity.js";
 import { ChartIngestion } from "./chart-ingestion.entity.js";

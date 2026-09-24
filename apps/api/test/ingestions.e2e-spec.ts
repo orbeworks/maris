@@ -30,7 +30,7 @@ import { IncrementalChartShards2026092002000 } from "../src/database/migrations/
 import type {
   ProcessingJob,
   ProcessingResult,
-} from "../src/ingestions/models/processing.js";
+} from "../src/ingestions/types/ingestion.types.js";
 import { ChartCatalogService } from "../src/ingestions/services/chart-catalog.service.js";
 import { IngestionPipelineService } from "../src/ingestions/services/ingestion-pipeline.service.js";
 import { IngestionsService } from "../src/ingestions/services/ingestions.service.js";

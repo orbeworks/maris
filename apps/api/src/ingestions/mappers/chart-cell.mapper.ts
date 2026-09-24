@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ChartCell } from "../entities/chart-cell.entity.js";
 import { ChartCoverage } from "../entities/chart-coverage.entity.js";
 import { ChartSurvey } from "../entities/chart-survey.entity.js";
-import type { ProcessedCell } from "./processing.js";
+import type { ProcessedCell } from "../types/ingestion.types.js";
 
 export function encDate(value: unknown): string | null {
   const raw = String(value ?? "");

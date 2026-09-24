@@ -4,7 +4,7 @@ import { rm } from 'node:fs/promises';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import type { ProcessingJob } from '../models/processing.js';
+import type { ProcessingJob } from '../types/ingestion.types.js';
 import { ChartCatalogService } from './chart-catalog.service.js';
 import { EncArchiveService } from './enc-archive.service.js';
 import { EncProcessingService } from './enc-processing.service.js';

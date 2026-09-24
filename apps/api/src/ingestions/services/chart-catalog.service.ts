@@ -15,13 +15,13 @@ import { ChartCell } from '../entities/chart-cell.entity.js';
 import { ChartCoverage } from '../entities/chart-coverage.entity.js';
 import { ChartSurvey } from '../entities/chart-survey.entity.js';
 import { ChartShard } from '../entities/chart-shard.entity.js';
-import { mapChartCell } from '../models/chart-cell.mapper.js';
+import { mapChartCell } from '../mappers/chart-cell.mapper.js';
 import type {
   IngestionStatus,
   ProcessingJob,
   ProcessingResult,
   ProcessingShard,
-} from '../models/processing.js';
+} from '../types/ingestion.types.js';
 
 export type CatalogIngestion = {
   archive: Pick<EncArchiveDto, 'cells'>;

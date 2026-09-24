@@ -1,7 +1,7 @@
 import type {
   EncMetadataFeature,
   ProcessedCell,
-} from "../../ingestions/models/processing.js";
+} from "../../ingestions/types/ingestion.types.js";
 
 export const CHART_SELECTION_POLICY = "detailed-coverage-v1";
 type Position = [number, number];
