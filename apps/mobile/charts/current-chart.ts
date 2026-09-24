@@ -31,7 +31,7 @@ export function useOnlineChart(apiUrl: string, enabled: boolean) {
       finally { running = false; clearTimeout(timeout); }
     };
     void load();
-    const interval = setInterval(() => void load(), 30_000);
+    const interval = setInterval(() => void load(), 15 * 60_000);
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void load(); });
     return () => { disposed = true; controller?.abort(); clearInterval(interval); subscription.remove(); };
   }, [apiUrl, enabled]);
