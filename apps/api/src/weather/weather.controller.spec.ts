@@ -6,7 +6,7 @@ import request from "supertest";
 
 import { GfsService } from "./gfs.service.js";
 import { WeatherController } from "./weather.controller.js";
-import { decodeGfsTile } from "./gfs-tiles.js";
+import { decodeGfsTile } from "./gfs-tile-codec.js";
 
 const successCacheControl = "public, s-maxage=1800, stale-while-revalidate=300";
 

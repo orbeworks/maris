@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { gzipSync } from "node:zlib";
 import { test } from "node:test";
 
-import { encodeGfsTile } from "./gfs-tiles.js";
+import { encodeGfsTile } from "./gfs-tile-codec.js";
 
 test("measures the 10 degree tile representations at GFS 0.25 degrees", () => {
   const count = 41 * 41;

@@ -1,7 +1,7 @@
 import { Redis } from "ioredis";
 import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { GFS_MAX_WEATHER_ZOOM, normalizeX } from "./gfs-xyz.js";
+import { GFS_MAX_WEATHER_ZOOM, normalizeX } from "./xyz-tiles.js";
 
 export type ActiveGfsRun = { run: string; status: "READY" };
 

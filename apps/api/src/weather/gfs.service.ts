@@ -17,13 +17,13 @@ import {
 import { ConfigService } from "@nestjs/config";
 
 import { type GfsBounds, type GfsGrid, type GfsRun } from "./gfs.types.js";
-import { gfsTileBounds, gfsTileFromCoordinate } from "./gfs-tiles.js";
+import { gfsTileBounds, gfsTileFromCoordinate } from "./gfs-grid-tiles.js";
 import {
   GFS_MAX_WEATHER_ZOOM,
   GFS_XYZ_GRID_SIZE,
   webMercatorTileBounds,
   xyzTileCount,
-} from "./gfs-xyz.js";
+} from "./xyz-tiles.js";
 
 const execFileAsync = promisify(execFile);
 const gzipAsync = promisify(gzip);

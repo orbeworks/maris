@@ -14,13 +14,13 @@ import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 
 import { GfsService } from "./gfs.service.js";
-import { encodeGfsTile } from "./gfs-tiles.js";
+import { encodeGfsTile } from "./gfs-tile-codec.js";
 import {
   GfsRedisCacheService,
   gfsCurrentRunId,
   gfsRunId,
 } from "./gfs-redis-cache.service.js";
-import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./gfs-xyz.js";
+import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./xyz-tiles.js";
 
 const GFS_SUCCESS_CACHE_CONTROL =
   "public, s-maxage=1800, stale-while-revalidate=300";

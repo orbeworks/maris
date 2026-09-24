@@ -8,13 +8,13 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { GfsService } from "./gfs.service.js";
-import { encodeGfsTile } from "./gfs-tiles.js";
+import { encodeGfsTile } from "./gfs-tile-codec.js";
 import {
   GfsRedisCacheService,
   gfsCurrentRunId,
   gfsRunId,
 } from "./gfs-redis-cache.service.js";
-import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./gfs-xyz.js";
+import { GFS_MAX_WEATHER_ZOOM, xyzTileCount } from "./xyz-tiles.js";
 
 type PrefetchTask = { z: number; x: number; y: number; forecastHour: number };
 const GFS_ZOOMS = Array.from({ length: GFS_MAX_WEATHER_ZOOM + 1 }, (_, z) => z);
