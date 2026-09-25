@@ -12,8 +12,8 @@ import { ConfigService } from "@nestjs/config";
 
 import type { IngestionDto } from "../dtos/ingestion.dto.js";
 import { EncArchiveService } from "./enc-archive.service.js";
-import { ChartCatalogService } from './chart-catalog.service.js';
-import { ProcessingDispatcherService } from './processing-dispatcher.service.js';
+import { ChartCatalogService } from "./chart-catalog.service.js";
+import { ProcessingDispatcherService } from "./processing-dispatcher.service.js";
 
 const ACCEPTED_MIME_TYPES = new Set([
   "application/octet-stream",

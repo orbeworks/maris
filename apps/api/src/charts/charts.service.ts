@@ -39,19 +39,24 @@ export class ChartsService {
     const catalogRevision = query.version
       ? /^catalog-(\d+)$/.exec(query.version)?.[1]
       : undefined;
+
     const incremental = this.catalog?.getPublishedCatalog
       ? await this.catalog.getPublishedCatalog(
           "soundg",
           catalogRevision === undefined ? undefined : Number(catalogRevision),
         )
       : null;
+
     if (incremental && (!query.version || catalogRevision !== undefined)) {
       const cells = await this.catalog.getPublishedCells(
         "soundg",
         incremental.revision,
       );
+
       const coordinate: [number, number] = [query.lon, query.lat];
+
       const selected = new ChartSelection(cells).at(coordinate);
+
       const cell =
         selected &&
         cells.find(
@@ -60,8 +65,11 @@ export class ChartsService {
             candidate.edition === selected.edition &&
             candidate.updateNumber === selected.updateNumber,
         );
-      if (!cell)
+
+      if (!cell) {
         throw new NotFoundException("No ENC coverage at this coordinate");
+      }
+
       return this.information(
         cell,
         coordinate,
@@ -70,6 +78,7 @@ export class ChartsService {
         cell.shard?.publishedAt ?? null,
       );
     }
+
     const version = await this.database.getRepository(ChartVersion).findOne({
       where: {
         status: "published",
@@ -77,24 +86,32 @@ export class ChartsService {
         ...(query.version ? { versionKey: query.version } : { active: true }),
       },
     });
-    if (!version)
+
+    if (!version) {
       throw new NotFoundException("Published chart version not found");
+    }
+
     const manifest = await this.storage.getManifest(
       "soundg",
       version.versionKey,
     );
+
     if (manifest.selectionPolicy !== CHART_SELECTION_POLICY) {
       throw new ConflictException(
         "This legacy dataset has overlapping charts; update the chart dataset",
       );
     }
+
     // Coverage metadata only. Never load the sounding GeoJSON or PMTiles here.
     const cells = await this.database.getRepository(ChartCell).find({
       where: { versionId: version.id },
       relations: { coverages: true },
     });
+
     const coordinate: [number, number] = [query.lon, query.lat];
+
     const selected = new ChartSelection(cells).at(coordinate);
+
     const cell =
       selected &&
       cells.find(
@@ -103,8 +120,11 @@ export class ChartsService {
           c.edition === selected.edition &&
           c.updateNumber === selected.updateNumber,
       );
-    if (!cell)
+
+    if (!cell) {
       throw new NotFoundException("No ENC coverage at this coordinate");
+    }
+
     return this.information(
       cell,
       coordinate,
@@ -130,6 +150,7 @@ export class ChartsService {
       (survey) =>
         survey.geometry === null || coversPoint(survey.geometry, coordinate),
     );
+
     return {
       id: cell.id,
       name: cell.name,

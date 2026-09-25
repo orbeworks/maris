@@ -8,8 +8,8 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
-import { createWriteStream } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 
 import type { EncArchiveDto } from "../dtos/ingestion.dto.js";
 
@@ -176,23 +176,55 @@ export class EncArchiveService {
   }
 
   /** Extracts only one cell's .000/.001... entries and immediately closes the ZIP stream. */
-  async extractCell(archivePath: string, cellName: string, destination: string): Promise<string[]> {
+  async extractCell(
+    archivePath: string,
+    cellName: string,
+    destination: string,
+  ): Promise<string[]> {
     const zip = await this.openZip(archivePath);
     const written: string[] = [];
     return new Promise((resolve, reject) => {
       let done = false;
-      const fail = (e: unknown) => { if (!done) { done = true; zip.close(); reject(e); } };
-      zip.on('error', fail);
-      zip.on('entry', async entry => {
+      const fail = (e: unknown) => {
+        if (!done) {
+          done = true;
+          zip.close();
+          reject(e);
+        }
+      };
+      zip.on("error", fail);
+      zip.on("entry", async (entry) => {
         try {
-          const base = path.posix.basename(entry.fileName.replaceAll('\\', '/'));
-          if (!new RegExp(`^${cellName}\\.\\d{3}$`, 'i').test(base)) { zip.readEntry(); return; }
+          const base = path.posix.basename(
+            entry.fileName.replaceAll("\\", "/"),
+          );
+          if (!new RegExp(String.raw`^${cellName}\.\d{3}$`, "i").test(base)) {
+            zip.readEntry();
+            return;
+          }
           const target = path.join(destination, base);
-          await pipeline(await new Promise<NodeJS.ReadableStream>((res, rej) => zip.openReadStream(entry, (err, stream) => err || !stream ? rej(err ?? new Error('ZIP stream unavailable')) : res(stream))), createWriteStream(target));
-          written.push(target); zip.readEntry();
-        } catch (e) { fail(e); }
+          await pipeline(
+            await new Promise<NodeJS.ReadableStream>((res, rej) =>
+              zip.openReadStream(entry, (err, stream) =>
+                err || !stream
+                  ? rej(err ?? new Error("ZIP stream unavailable"))
+                  : res(stream),
+              ),
+            ),
+            createWriteStream(target),
+          );
+          written.push(target);
+          zip.readEntry();
+        } catch (e) {
+          fail(e);
+        }
       });
-      zip.on('end', () => { if (!done) { done = true; resolve(written); } });
+      zip.on("end", () => {
+        if (!done) {
+          done = true;
+          resolve(written);
+        }
+      });
       zip.readEntry();
     });
   }

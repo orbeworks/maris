@@ -1,38 +1,38 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
 
 import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { DataSource } from 'typeorm';
+} from "@nestjs/common";
+import { DataSource } from "typeorm";
 
-import type { EncArchiveDto } from '../dtos/ingestion.dto.js';
-import { ChartDataset } from '../entities/chart-dataset.entity.js';
-import { ChartIngestion } from '../entities/chart-ingestion.entity.js';
-import { ChartVersion } from '../entities/chart-version.entity.js';
-import { ChartCell } from '../entities/chart-cell.entity.js';
-import { ChartCoverage } from '../entities/chart-coverage.entity.js';
-import { ChartSurvey } from '../entities/chart-survey.entity.js';
-import { ChartShard } from '../entities/chart-shard.entity.js';
-import { mapChartCell } from '../mappers/chart-cell.mapper.js';
+import type { EncArchiveDto } from "../dtos/ingestion.dto.js";
+import { ChartDataset } from "../entities/chart-dataset.entity.js";
+import { ChartIngestion } from "../entities/chart-ingestion.entity.js";
+import { ChartVersion } from "../entities/chart-version.entity.js";
+import { ChartCell } from "../entities/chart-cell.entity.js";
+import { ChartCoverage } from "../entities/chart-coverage.entity.js";
+import { ChartSurvey } from "../entities/chart-survey.entity.js";
+import { ChartShard } from "../entities/chart-shard.entity.js";
+import { mapChartCell } from "../mappers/chart-cell.mapper.js";
 import type {
   IngestionStatus,
   ProcessingJob,
   ProcessingResult,
   ProcessingShard,
-} from '../types/ingestion.types.js';
+} from "../types/ingestion.types.js";
 
 export type CatalogIngestion = {
-  archive: Pick<EncArchiveDto, 'cells'>;
-  checksum: { algorithm: 'sha256'; value: string };
+  archive: Pick<EncArchiveDto, "cells">;
+  checksum: { algorithm: "sha256"; value: string };
   createdAt: string;
   datasetId: string;
   error: string | null;
   id: string;
   originalFilename: string;
   sizeBytes: number;
-  sourceType: 'S57';
+  sourceType: "S57";
   status: IngestionStatus;
   storagePath: string;
   updatedAt: string;
@@ -53,7 +53,7 @@ export class ChartCatalogService {
     storagePath: string;
   }): Promise<CatalogIngestion> {
     const versionId = randomUUID();
-    const datasetKey = 'soundg';
+    const datasetKey = "soundg";
     const versionKey = `${datasetKey}-${versionId}`;
 
     await this.dataSource.transaction(async (manager) => {
@@ -72,7 +72,7 @@ export class ChartCatalogService {
           sourceCells: input.archive.cells,
           sourceFilename: input.originalFilename,
           sourceSizeBytes: String(input.sizeBytes),
-          status: 'received',
+          status: "received",
         }),
       );
       const versions = manager.getRepository(ChartVersion);
@@ -81,38 +81,42 @@ export class ChartCatalogService {
           datasetId: dataset.id,
           id: versionId,
           ingestionId: input.ingestionId,
-          status: 'received',
+          status: "received",
           versionKey,
         }),
       );
     });
 
     const ingestion = await this.findIngestion(input.ingestionId);
-    if (!ingestion) throw new Error('Created ingestion could not be loaded');
+    if (!ingestion) throw new Error("Created ingestion could not be loaded");
     return ingestion;
   }
 
   async findIngestion(id: string): Promise<CatalogIngestion | null> {
-    const ingestion = await this.dataSource.getRepository(ChartIngestion).findOne({
-      relations: { dataset: true, version: true },
-      where: { id },
-    });
+    const ingestion = await this.dataSource
+      .getRepository(ChartIngestion)
+      .findOne({
+        relations: { dataset: true, version: true },
+        where: { id },
+      });
     return ingestion ? this.toIngestion(ingestion) : null;
   }
 
   async listRecoverableJobs(): Promise<ProcessingJob[]> {
-    const ingestions = await this.dataSource.getRepository(ChartIngestion).find({
-      order: { createdAt: 'ASC' },
-      relations: { version: true },
-      where: [
-        { status: 'received' },
-        { status: 'validating' },
-        { status: 'processing' },
-        { status: 'ready' },
-      ],
-    });
+    const ingestions = await this.dataSource
+      .getRepository(ChartIngestion)
+      .find({
+        order: { createdAt: "ASC" },
+        relations: { version: true },
+        where: [
+          { status: "received" },
+          { status: "validating" },
+          { status: "processing" },
+          { status: "ready" },
+        ],
+      });
     return ingestions.map((ingestion) => ({
-      archivePath: ingestion.archiveStoragePath ?? '',
+      archivePath: ingestion.archiveStoragePath ?? "",
       ingestionId: ingestion.id,
       versionId: ingestion.version.id,
       versionKey: ingestion.version.versionKey,
@@ -128,13 +132,13 @@ export class ChartCatalogService {
         .set({
           errorMessage: null,
           errorStack: null,
-          processingStartedAt: () => 'COALESCE(processing_started_at, now())',
-          status: 'validating',
-          updatedAt: () => 'now()',
+          processingStartedAt: () => "COALESCE(processing_started_at, now())",
+          status: "validating",
+          updatedAt: () => "now()",
         })
-        .where('id = :ingestionId', { ingestionId })
-        .andWhere('status IN (:...statuses)', {
-          statuses: ['received', 'validating', 'processing', 'failed'],
+        .where("id = :ingestionId", { ingestionId })
+        .andWhere("status IN (:...statuses)", {
+          statuses: ["received", "validating", "processing", "failed"],
         })
         .execute();
       if (ingestionResult.affected !== 1) return false;
@@ -146,12 +150,12 @@ export class ChartCatalogService {
         .set({
           errorMessage: null,
           errorStack: null,
-          status: 'validating',
-          updatedAt: () => 'now()',
+          status: "validating",
+          updatedAt: () => "now()",
         })
-        .where('ingestion_id = :ingestionId', { ingestionId })
-        .andWhere('status IN (:...statuses)', {
-          statuses: ['received', 'validating', 'processing', 'failed'],
+        .where("ingestion_id = :ingestionId", { ingestionId })
+        .andWhere("status IN (:...statuses)", {
+          statuses: ["received", "validating", "processing", "failed"],
         })
         .execute();
       return true;
@@ -159,7 +163,7 @@ export class ChartCatalogService {
   }
 
   async markProcessing(ingestionId: string) {
-    await this.updateStatus(ingestionId, 'processing');
+    await this.updateStatus(ingestionId, "processing");
   }
 
   async markReady(ingestionId: string, result: ProcessingResult) {
@@ -168,15 +172,20 @@ export class ChartCatalogService {
       ...result.cells.map((cell) => cell.updateNumber),
     );
     await this.dataSource.transaction(async (manager) => {
-      const version = await manager.getRepository(ChartVersion).findOneByOrFail({ ingestionId });
+      const version = await manager
+        .getRepository(ChartVersion)
+        .findOneByOrFail({ ingestionId });
       await manager.getRepository(ChartCell).delete({ versionId: version.id });
-      const mappedCells = result.cells.map((cell) => mapChartCell(version.id, cell));
+      const mappedCells = result.cells.map((cell) =>
+        mapChartCell(version.id, cell),
+      );
       // Chunk each entity independently: root-only chunking still lets cascade
       // inserts exceed PostgreSQL's parameter limit for survey/coverage rows.
       const cells = mappedCells.map(({ coverages, surveys, ...cell }) => cell);
       const coverages = mappedCells.flatMap((cell) => cell.coverages);
       const surveys = mappedCells.flatMap((cell) => cell.surveys);
       const saveOptions = { chunk: 500, reload: false };
+
       await manager.getRepository(ChartCell).save(cells, saveOptions);
       await manager.getRepository(ChartCoverage).save(coverages, saveOptions);
       await manager.getRepository(ChartSurvey).save(surveys, saveOptions);
@@ -184,9 +193,11 @@ export class ChartCatalogService {
         errorMessage: null,
         errorStack: null,
         processedAt: new Date(),
-        status: 'ready',
+        status: "ready",
       });
-      await manager.getRepository(ChartVersion).createQueryBuilder()
+      await manager
+        .getRepository(ChartVersion)
+        .createQueryBuilder()
         .update()
         .set({
           bounds: result.bounds,
@@ -196,38 +207,41 @@ export class ChartCatalogService {
           artifactObjectKey: result.artifactObjectKey ?? null,
           manifestObjectKey: result.manifestObjectKey ?? null,
           processedAt: new Date(),
-          status: 'ready',
+          status: "ready",
           storagePath: result.storagePath,
           updateNumber: maximumUpdate,
         })
-        .where('ingestion_id = :ingestionId', { ingestionId })
+        .where("ingestion_id = :ingestionId", { ingestionId })
         .execute();
     });
   }
 
   async publishShard(ingestionId: string, result: ProcessingShard) {
     if (!result.artifactObjectKey || !result.manifestObjectKey) {
-      throw new Error('Incremental chart shards require object storage');
+      throw new Error("Incremental chart shards require object storage");
     }
     const artifactObjectKey = result.artifactObjectKey;
     const manifestObjectKey = result.manifestObjectKey;
     return this.dataSource.transaction(async (manager) => {
-      const version = await manager.getRepository(ChartVersion).findOneByOrFail({ ingestionId });
+      const version = await manager
+        .getRepository(ChartVersion)
+        .findOneByOrFail({ ingestionId });
       const existing = await manager.getRepository(ChartShard).findOneBy({
         shardKey: result.shardKey,
       });
       if (existing) return Number(existing.revision);
 
-      const revisionResult = await manager.query(
+      const revisionResult = (await manager.query(
         `UPDATE chart_datasets SET revision = COALESCE(revision, 0) + 1, updated_at = now()
          WHERE id = $1 RETURNING revision`,
         [version.datasetId],
-      ) as { revision: string }[] | [{ revision: string }[], number];
+      )) as { revision: string }[] | [{ revision: string }[], number];
       const revisionRows = Array.isArray(revisionResult[0])
         ? revisionResult[0]
-        : revisionResult as { revision: string }[];
+        : (revisionResult as { revision: string }[]);
       const revision = revisionRows[0]?.revision;
-      if (!revision) throw new Error('Chart dataset revision could not be allocated');
+      if (!revision)
+        throw new Error("Chart dataset revision could not be allocated");
 
       const shardId = randomUUID();
       await manager.getRepository(ChartShard).insert({
@@ -284,51 +298,64 @@ export class ChartCatalogService {
       await manager.getRepository(ChartIngestion).update(ingestionId, {
         processedAt: publishedAt,
         publishedAt,
-        status: 'published',
+        status: "published",
       });
-      await manager.getRepository(ChartVersion).update(
-        { ingestionId },
-        { active: true, processedAt: publishedAt, publishedAt, status: 'published' },
-      );
+      await manager
+        .getRepository(ChartVersion)
+        .update(
+          { ingestionId },
+          {
+            active: true,
+            processedAt: publishedAt,
+            publishedAt,
+            status: "published",
+          },
+        );
     });
   }
 
   async getPublishedCatalog(datasetKey: string, requestedRevision?: number) {
-    const dataset = await this.dataSource.getRepository(ChartDataset).findOneBy({
-      key: datasetKey,
-    });
+    const dataset = await this.dataSource
+      .getRepository(ChartDataset)
+      .findOneBy({
+        key: datasetKey,
+      });
     if (!dataset || Number(dataset.revision) === 0) return null;
-    const revision = requestedRevision === undefined
-      ? Number(dataset.revision)
-      : Math.min(requestedRevision, Number(dataset.revision));
+    const revision =
+      requestedRevision === undefined
+        ? Number(dataset.revision)
+        : Math.min(requestedRevision, Number(dataset.revision));
     if (!Number.isSafeInteger(revision) || revision < 1) return null;
-    const shards = await this.dataSource.getRepository(ChartShard)
-      .createQueryBuilder('shard')
-      .innerJoinAndSelect('shard.version', 'version')
-      .where('version.dataset_id = :datasetId', { datasetId: dataset.id })
-      .andWhere('version.active = true')
-      .andWhere('shard.revision <= :revision', { revision })
-      .orderBy('shard.revision', 'ASC')
+    const shards = await this.dataSource
+      .getRepository(ChartShard)
+      .createQueryBuilder("shard")
+      .innerJoinAndSelect("shard.version", "version")
+      .where("version.dataset_id = :datasetId", { datasetId: dataset.id })
+      .andWhere("version.active = true")
+      .andWhere("shard.revision <= :revision", { revision })
+      .orderBy("shard.revision", "ASC")
       .getMany();
     if (shards.length === 0) return null;
     return { dataset, revision, shards };
   }
 
   async getPublishedCells(datasetKey: string, revision: number) {
-    return this.dataSource.getRepository(ChartCell)
-      .createQueryBuilder('cell')
-      .innerJoinAndSelect('cell.coverages', 'coverage')
-      .innerJoinAndSelect('cell.shard', 'shard')
-      .innerJoinAndSelect('cell.version', 'version')
-      .innerJoin('version.dataset', 'dataset')
-      .where('dataset.key = :datasetKey', { datasetKey })
-      .andWhere('version.active = true')
-      .andWhere('shard.revision <= :revision', { revision })
+    return this.dataSource
+      .getRepository(ChartCell)
+      .createQueryBuilder("cell")
+      .innerJoinAndSelect("cell.coverages", "coverage")
+      .innerJoinAndSelect("cell.shard", "shard")
+      .innerJoinAndSelect("cell.version", "version")
+      .innerJoin("version.dataset", "dataset")
+      .where("dataset.key = :datasetKey", { datasetKey })
+      .andWhere("version.active = true")
+      .andWhere("shard.revision <= :revision", { revision })
       .getMany();
   }
 
   async markFailed(ingestionId: string, error: unknown) {
-    const normalized = error instanceof Error ? error : new Error(String(error));
+    const normalized =
+      error instanceof Error ? error : new Error(String(error));
     const message = normalized.message.slice(0, 4_000);
     const stack = normalized.stack?.slice(0, 16_000) ?? null;
     await this.dataSource.transaction(async (manager) => {
@@ -336,13 +363,15 @@ export class ChartCatalogService {
         ingestionId,
       });
       const publishedShardCount = version
-        ? await manager.getRepository(ChartShard).countBy({ versionId: version.id })
+        ? await manager
+            .getRepository(ChartShard)
+            .countBy({ versionId: version.id })
         : 0;
       await manager.getRepository(ChartIngestion).update(ingestionId, {
         errorMessage: message,
         errorStack: stack,
         processedAt: new Date(),
-        status: 'failed',
+        status: "failed",
       });
       await manager.getRepository(ChartVersion).update(
         { ingestionId },
@@ -351,7 +380,7 @@ export class ChartCatalogService {
           errorMessage: message,
           errorStack: stack,
           processedAt: new Date(),
-          status: 'failed',
+          status: "failed",
         },
       );
     });
@@ -361,16 +390,18 @@ export class ChartCatalogService {
     return this.dataSource.transaction(async (manager) => {
       const versions = manager.getRepository(ChartVersion);
       const version = await versions.findOne({
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
         where: { id: versionId },
       });
-      if (!version) throw new NotFoundException('Chart version not found');
-      if (version.status !== 'ready') {
-        throw new ConflictException('Only ready chart versions can be published');
+      if (!version) throw new NotFoundException("Chart version not found");
+      if (version.status !== "ready") {
+        throw new ConflictException(
+          "Only ready chart versions can be published",
+        );
       }
 
       await manager.getRepository(ChartDataset).findOne({
-        lock: { mode: 'pessimistic_write' },
+        lock: { mode: "pessimistic_write" },
         where: { id: version.datasetId },
       });
       await versions.update(
@@ -382,11 +413,11 @@ export class ChartCatalogService {
       await versions.update(version.id, {
         active: true,
         publishedAt,
-        status: 'published',
+        status: "published",
       });
       await manager.getRepository(ChartIngestion).update(version.ingestionId, {
         publishedAt,
-        status: 'published',
+        status: "published",
       });
       return version.versionKey;
     });
@@ -398,12 +429,12 @@ export class ChartCatalogService {
       where: {
         active: true,
         dataset: { key: datasetKey },
-        status: 'published',
+        status: "published",
       },
     });
     if (!version) return null;
     return {
-      manifest_path: this.required(version.manifestPath, 'manifest path'),
+      manifest_path: this.required(version.manifestPath, "manifest path"),
       version_key: version.versionKey,
     };
   }
@@ -411,10 +442,9 @@ export class ChartCatalogService {
   private async updateStatus(id: string, status: IngestionStatus) {
     await this.dataSource.transaction(async (manager) => {
       await manager.getRepository(ChartIngestion).update(id, { status });
-      await manager.getRepository(ChartVersion).update(
-        { ingestionId: id },
-        { status },
-      );
+      await manager
+        .getRepository(ChartVersion)
+        .update({ ingestionId: id }, { status });
     });
   }
 
@@ -422,18 +452,21 @@ export class ChartCatalogService {
     return {
       archive: { cells: ingestion.sourceCells },
       checksum: {
-        algorithm: 'sha256',
-        value: this.required(ingestion.checksumSha256, 'checksum'),
+        algorithm: "sha256",
+        value: this.required(ingestion.checksumSha256, "checksum"),
       },
       createdAt: ingestion.createdAt.toISOString(),
       datasetId: ingestion.datasetId,
       error: ingestion.errorMessage,
       id: ingestion.id,
-      originalFilename: this.required(ingestion.sourceFilename, 'source filename'),
+      originalFilename: this.required(
+        ingestion.sourceFilename,
+        "source filename",
+      ),
       sizeBytes: Number(ingestion.sourceSizeBytes),
-      sourceType: 'S57',
+      sourceType: "S57",
       status: ingestion.status,
-      storagePath: this.required(ingestion.archiveStoragePath, 'archive path'),
+      storagePath: this.required(ingestion.archiveStoragePath, "archive path"),
       updatedAt: ingestion.updatedAt.toISOString(),
       versionId: ingestion.version.id,
       versionKey: ingestion.version.versionKey,

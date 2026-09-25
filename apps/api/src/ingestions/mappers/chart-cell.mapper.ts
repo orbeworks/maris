@@ -6,9 +6,15 @@ import type { ProcessedCell } from "../types/ingestion.types.js";
 
 export function encDate(value: unknown): string | null {
   const raw = String(value ?? "");
-  if (!/^\d{8}$/.test(raw)) return null;
+
+  if (!/^\d{8}$/.test(raw)) {
+    return null;
+  }
+
   const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+
   const date = new Date(iso);
+
   return Number.isFinite(date.getTime()) &&
     date.toISOString().slice(0, 10) === iso
     ? iso
@@ -21,6 +27,7 @@ export function mapChartCell(
   shardId: string | null = null,
 ): ChartCell {
   const metadata = input.metadata;
+
   const cell = Object.assign(new ChartCell(), {
     id: randomUUID(),
     versionId,
@@ -39,6 +46,7 @@ export function mapChartCell(
     soundingDatum: metadata?.soundingDatum ?? null,
     coveredAreaNames: metadata?.coveredAreaNames ?? [],
   });
+
   cell.coverages = (metadata?.coverage ?? []).map((feature) =>
     Object.assign(new ChartCoverage(), {
       id: randomUUID(),
@@ -50,6 +58,7 @@ export function mapChartCell(
       geometry: feature.geometry,
     }),
   );
+
   cell.surveys = Object.entries(metadata?.metaObjects ?? {}).flatMap(
     ([objectClass, features]) =>
       features
@@ -74,5 +83,6 @@ export function mapChartCell(
           });
         }),
   );
+
   return cell;
 }

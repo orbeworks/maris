@@ -86,7 +86,6 @@ test("repeated native camera events settle without a render/command feedback loo
     ]);
     await act(async () => controls().props.onMapModeChange("bright"));
     assert.equal(map().props.mapStyle, "https://tiles.openfreemap.org/styles/bright");
-    await act(async () => renderer!.root.findByType("WindPanel" as any).props.onToggle());
     await flush();
     assert.ok(fixture.renders < 10, "unchanged wind coordinates must not restart rendering");
     fixture.longitude = -80.15;

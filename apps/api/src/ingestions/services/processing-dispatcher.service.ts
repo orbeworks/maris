@@ -4,13 +4,13 @@ import {
   Logger,
   OnApplicationBootstrap,
   ServiceUnavailableException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
-import type { ProcessingJob } from '../types/ingestion.types.js';
-import { ChartCatalogService } from './chart-catalog.service.js';
-import { IngestionPipelineService } from './ingestion-pipeline.service.js';
-import { ProcessingCleanupService } from './processing-cleanup.service.js';
+import type { ProcessingJob } from "../types/ingestion.types.js";
+import { ChartCatalogService } from "./chart-catalog.service.js";
+import { IngestionPipelineService } from "./ingestion-pipeline.service.js";
+import { ProcessingCleanupService } from "./processing-cleanup.service.js";
 
 @Injectable()
 export class ProcessingDispatcherService implements OnApplicationBootstrap {
@@ -27,12 +27,13 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap {
     private readonly cleanup: ProcessingCleanupService,
     @Inject(ConfigService) config: ConfigService,
   ) {
-    this.enabled = config.get<boolean>('ENC_PROCESSING_ENABLED', true) !== false;
+    this.enabled =
+      config.get<boolean>("ENC_PROCESSING_ENABLED", true) !== false;
   }
 
   async onApplicationBootstrap() {
     if (!this.enabled) {
-      this.logger.log('disabled by ENC_PROCESSING_ENABLED');
+      this.logger.log("disabled by ENC_PROCESSING_ENABLED");
       return;
     }
     await this.cleanup.recoverOrphans();
@@ -42,12 +43,12 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap {
   reserve() {
     if (!this.enabled) {
       throw new ServiceUnavailableException(
-        'ENC ingestion is disabled on this API instance',
+        "ENC ingestion is disabled on this API instance",
       );
     }
     if (this.active || this.reserved) {
       throw new ServiceUnavailableException(
-        'An ENC ingestion is already processing on this API instance',
+        "An ENC ingestion is already processing on this API instance",
       );
     }
     this.reserved = true;
@@ -59,7 +60,7 @@ export class ProcessingDispatcherService implements OnApplicationBootstrap {
 
   dispatch(job: ProcessingJob) {
     if (!this.reserved) {
-      throw new Error('ENC processing must be reserved before dispatch');
+      throw new Error("ENC processing must be reserved before dispatch");
     }
     this.reserved = false;
     this.launch(job);

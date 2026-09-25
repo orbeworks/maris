@@ -62,12 +62,14 @@ export class ObjectStorageService {
         name?: string;
         $metadata?: { httpStatusCode?: number };
       };
+
       if (
         details.name === "NotFound" ||
         details.name === "NoSuchKey" ||
         details.$metadata?.httpStatusCode === 404
       )
         return null;
+
       throw error;
     }
   }
@@ -76,7 +78,11 @@ export class ObjectStorageService {
     const response = await this.requireClient().send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
     );
-    if (!response.Body) throw new Error(`S3 object ${key} has no body`);
+
+    if (!response.Body) {
+      throw new Error(`S3 object ${key} has no body`);
+    }
+
     return response.Body.transformToString("utf-8");
   }
 
@@ -95,17 +101,25 @@ export class ObjectStorageService {
     ) {
       throw new Error("Invalid S3 byte range");
     }
+
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
       Range: `bytes=${offset}-${offset + length - 1}`,
     });
+
     const response = signal
       ? await this.requireClient().send(command, { abortSignal: signal })
       : await this.requireClient().send(command);
-    if (!response.Body) throw new Error(`S3 object ${key} has no body`);
+
+    if (!response.Body) {
+      throw new Error(`S3 object ${key} has no body`);
+    }
+
     const bytes = await response.Body.transformToByteArray();
+
     const data = Uint8Array.from(bytes).buffer;
+
     return response.ETag ? { data, etag: response.ETag } : { data };
   }
 

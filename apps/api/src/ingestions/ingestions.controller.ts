@@ -42,6 +42,7 @@ export class IngestionsController {
     @Param("id", new ParseUUIDPipe({ version: "4" })) id: string,
   ): Promise<IngestionDto> {
     const ingestion = await this.ingestionsService.find(id);
+
     if (!ingestion) {
       throw new NotFoundException("Ingestion not found");
     }

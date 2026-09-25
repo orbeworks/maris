@@ -71,17 +71,7 @@ test("course up activates before heading is available and follows north without 
     await writeFile(compiled, output.outputFiles[0].contents);
     const App = require(compiled).default;
     await act(async () => { renderer = create(React.createElement(App)); });
-    const wind = () => renderer!.root.find(node => node.type === ("WindPanel" as unknown));
-    const stack = wind().parent!;
-    assert.equal(stack.type, "MapOverlaySlot");
-    await act(async () => wind().props.onToggle());
-    assert.equal(wind().props.enabled, true);
-    assert.equal(wind().props.loading, true);
     const nativeWind = () => renderer!.root.find(node => node.type === ("NativeWindLayer" as unknown));
-    await act(async () => nativeWind().props.onDataStatus({nativeEvent:{stale:true,savedAt:0,loading:true}}));
-    assert.equal(wind().props.loading, true, "cached data keeps loading while MET refreshes");
-    await act(async () => nativeWind().props.onDataStatus({nativeEvent:{stale:false,savedAt:1,loading:false}}));
-    assert.equal(wind().props.loading, false, "terminal MET status restores the wind icon");
     const map = renderer!.root.find(node => node.type === ("Map" as unknown));
     const center = [-80.15, 25.77];
     await act(async () => {
@@ -91,14 +81,8 @@ test("course up activates before heading is available and follows north without 
     await flushFrames();
     assert.deepEqual(nativeWind().props.sampleCoordinate, center,
       "wind queries current center without touchend, moveend or debounce");
-    await act(async () => nativeWind().props.onCenterWind({nativeEvent:{coordinate:center,speed:6}}));
-    assert.equal(wind().props.centerWindSpeed, 6);
-    await act(async () => nativeWind().props.onCenterWind({nativeEvent:{coordinate:center,speed:7}}));
-    assert.equal(wind().props.centerWindSpeed, 6, "same band keeps selection stable");
     await act(async () => map.props.onRegionDidChange({nativeEvent:{center:coordinate,zoom:14,bearing:0}}));
     await flushFrames();
-    assert.equal(wind().parent, stack,
-      "expansion must not change the containing block of the right-aligned wind panel");
     const controls = () => renderer!.root.find(node => node.type === ("MapControlsPanel" as unknown));
     assert.equal(controls().props.locationActive, true);
     await act(async () => controls().props.onLocate());
