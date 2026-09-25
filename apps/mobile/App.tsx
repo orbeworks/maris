@@ -43,7 +43,6 @@ import { viewportTileCoverage } from "./map/viewport-tile-coverage";
 import type { GfsBounds, MapCenter } from "./weather/gfs-grid";
 
 const BASE_MAP_STYLE = "https://tiles.openfreemap.org/styles/bright";
-const LIBERTY_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const GOOGLE_SATELLITE_STYLE = JSON.stringify({
   version: 8,
   glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
@@ -350,9 +349,7 @@ export default function App() {
         mapStyle={
           mapStyleMode === "satellite"
             ? GOOGLE_SATELLITE_STYLE
-            : mapStyleMode === "liberty"
-              ? LIBERTY_MAP_STYLE
-              : mapStyleMode === "bright"
+            : mapStyleMode === "bright"
                 ? BASE_MAP_STYLE
                 : offlineArea
               ? JSON.stringify(offlineArea.baseStyle)

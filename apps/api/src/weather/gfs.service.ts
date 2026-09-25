@@ -133,8 +133,6 @@ function sampleGridField(
 export class GfsService {
   private readonly logger = new Logger(GfsService.name);
 
-  private currentForecastLogKey = "";
-
   constructor(private readonly config: ConfigService) {}
 
   @Cacheable()
@@ -209,26 +207,6 @@ export class GfsService {
     const validTime = new Date(
       runAtMs + sourceForecastHour * 3_600_000,
     ).toISOString();
-
-    const logKey = `${inventory.run.runAt}|${sourceForecastHour}`;
-
-    if (this.currentForecastLogKey !== logKey) {
-      this.currentForecastLogKey = logKey;
-
-      const deltaMinutes = Math.round(
-        (Date.parse(validTime) - now.getTime()) / 60_000,
-      );
-
-      this.logger.log(
-        `[GFS current] serverNowUtc=${now.toISOString()} ` +
-          `serverTimezone=${Intl.DateTimeFormat().resolvedOptions().timeZone} ` +
-          `serverUtcOffsetMinutes=${-now.getTimezoneOffset()} ` +
-          `runAtUtc=${inventory.run.runAt} ` +
-          `sourceForecastHour=${sourceForecastHour} ` +
-          `validTimeUtc=${validTime} ` +
-          `deltaMinutes=${deltaMinutes}`,
-      );
-    }
 
     return {
       inventory,
@@ -438,7 +416,6 @@ export class GfsService {
       ) {
         return inventory;
       }
-
     }
 
     throw new ServiceUnavailableException(
@@ -898,5 +875,4 @@ export class GfsService {
       fields,
     };
   }
-
 }

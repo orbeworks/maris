@@ -21,7 +21,7 @@ test("Android location icon loses its fill off GPS and preserves centered/course
       bundle: true, write: false, platform: "node", format: "cjs", jsx: "automatic",
       plugins: [{ name: "native-controls-adapters", setup(builder) {
         builder.onResolve({ filter: /^react(?:\/jsx-runtime)?$/ }, args => ({ path: require.resolve(args.path), external: true }));
-        builder.onResolve({ filter: /^(react-native|expo-symbols|@expo\/vector-icons\/(MaterialCommunityIcons|MaterialIcons|FontAwesome6)|\.\/BlurPanel)$/ }, args => ({ path: args.path, namespace: "mock" }));
+        builder.onResolve({ filter: /^(react-native|expo-symbols|@expo\/vector-icons\/(MaterialCommunityIcons|FontAwesome6)|\.\/BlurPanel)$/ }, args => ({ path: args.path, namespace: "mock" }));
         builder.onLoad({ filter: /.*/, namespace: "mock" }, args => ({ loader: "js", contents:
           args.path === "react-native" ? `export const Platform={OS:"android"}; export const StyleSheet={create:x=>x}; export const View="View", Pressable="Pressable", ActivityIndicator="ActivityIndicator";
             export const Easing={cubic:x=>x,inOut:x=>x};
@@ -29,7 +29,7 @@ test("Android location icon loses its fill off GPS and preserves centered/course
           args.path === "expo-symbols" ? 'export const SymbolView="SymbolView";' :
           args.path === "./BlurPanel" ? 'export const BlurPanel="BlurPanel", BLUR_PANEL_ICON_SIZE=20, BLUR_PANEL_GAP=8;' :
           args.path.includes("FontAwesome6") ? 'export default "FontAwesome6";' :
-          args.path.endsWith("/MaterialIcons") ? 'export default "MaterialIcons";' : 'export default "MaterialCommunityIcons";'
+          'export default "MaterialCommunityIcons";'
         }));
       }}],
     });
@@ -63,13 +63,7 @@ test("Android location icon loses its fill off GPS and preserves centered/course
       renderer!.root.find(node => node.props.accessibilityLabel === "Show satellite map").props.onPress();
     });
     assert.equal(mapModes.at(-1), "satellite");
-    const threeDimensionalIcon = renderer!.root.findByType("MaterialIcons" as any);
-    assert.equal(threeDimensionalIcon.props.name, "3d-rotation");
-    await act(async () => {
-      renderer!.root.find(node => node.props.accessibilityLabel === "Show Liberty map").props.onPress();
-    });
     assert.equal(globeIcons()[0].props.name, "language");
-    assert.equal(mapModes.at(-1), "liberty");
     await act(async () => {
       renderer!.root.find(node => node.props.accessibilityLabel === "Show bright map").props.onPress();
     });

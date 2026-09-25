@@ -6,7 +6,7 @@ import { resolveHeading, smoothHeading } from './navigation-heading';
 
 const EARTH_RADIUS_METRES = 6_371_000;
 const KNOTS_PER_METRE_PER_SECOND = 1.94384;
-const MIN_COG_SPEED_KT = 1;
+const GPS_COG_MIN_SPEED_KT = 5;
 
 type TimedCoordinate = {
   coordinate: [number, number];
@@ -94,12 +94,25 @@ export function useDeviceLocation(): DeviceLocation | null {
   const smoothedHeadingRef = useRef<number | null>(null);
   const latestLocationRef = useRef<TimedCoordinate | null>(null);
   const latestNativeSpeedAtRef = useRef<number | null>(null);
+  const hasInitialHeadingCogRef = useRef(false);
+  const hasValidGpsCogRef = useRef(false);
 
   useEffect(() => {
     let active = true;
     let locationSubscription: Location.LocationSubscription | undefined;
     let headingSubscription: Location.LocationSubscription | undefined;
     let speedFallbackTimer: ReturnType<typeof setInterval> | undefined;
+    const publishInitialHeadingCog = (value: number | null) => {
+      if (
+        value === null ||
+        hasInitialHeadingCogRef.current ||
+        hasValidGpsCogRef.current
+      ) {
+        return;
+      }
+      hasInitialHeadingCogRef.current = true;
+      setCog(value);
+    };
     const publishSpeed = (location: TimedCoordinate, nativeSpeed: number | null | undefined) => {
       const fallbackSpeed = speedBetweenPoints(latestLocationRef.current, location);
       latestLocationRef.current = location;
@@ -127,6 +140,7 @@ export function useDeviceLocation(): DeviceLocation | null {
       setHeading((currentHeading) =>
         currentHeading === smoothedHeading ? currentHeading : smoothedHeading,
       );
+      publishInitialHeadingCog(smoothedHeading);
     };
 
     const start = async () => {
@@ -155,8 +169,16 @@ export function useDeviceLocation(): DeviceLocation | null {
         ]);
         setAccuracy(lastKnownPosition.coords.accuracy ?? null);
         const initialSpeed = publishSpeed(lastKnownLocation, lastKnownPosition.coords.speed);
-        if (initialSpeed !== null && initialSpeed * KNOTS_PER_METRE_PER_SECOND >= MIN_COG_SPEED_KT) {
-          setCog(readCog(lastKnownPosition.coords.heading, null, lastKnownLocation));
+        const initialCog =
+          initialSpeed !== null &&
+          initialSpeed * KNOTS_PER_METRE_PER_SECOND >= GPS_COG_MIN_SPEED_KT
+            ? readCog(lastKnownPosition.coords.heading, null, lastKnownLocation)
+            : null;
+        if (initialCog !== null) {
+          hasValidGpsCogRef.current = true;
+          setCog(initialCog);
+        } else {
+          publishInitialHeadingCog(smoothedHeadingRef.current);
         }
       }
 
@@ -179,9 +201,21 @@ export function useDeviceLocation(): DeviceLocation | null {
           const effectiveSpeed = publishSpeed(currentLocation, coords.speed);
           if (
             effectiveSpeed !== null &&
-            effectiveSpeed * KNOTS_PER_METRE_PER_SECOND >= MIN_COG_SPEED_KT
+            effectiveSpeed * KNOTS_PER_METRE_PER_SECOND >= GPS_COG_MIN_SPEED_KT
           ) {
-            setCog(readCog(coords.heading, previousLocation, currentLocation));
+            const nextCog = readCog(
+              coords.heading,
+              previousLocation,
+              currentLocation,
+            );
+            if (nextCog !== null) {
+              hasValidGpsCogRef.current = true;
+              setCog(nextCog);
+            } else {
+              publishInitialHeadingCog(smoothedHeadingRef.current);
+            }
+          } else {
+            publishInitialHeadingCog(smoothedHeadingRef.current);
           }
         },
       );
@@ -196,10 +230,12 @@ export function useDeviceLocation(): DeviceLocation | null {
 
         // With no newer native speed, the latest known coordinate is the best
         // available position. A stationary coordinate therefore resolves to 0 m/s.
-        setSpeed(speedBetweenPoints(latestLocation, {
+        const fallbackSpeed = speedBetweenPoints(latestLocation, {
           coordinate: latestLocation.coordinate,
           timestamp: Date.now(),
-        }) ?? 0);
+        }) ?? 0;
+        setSpeed(fallbackSpeed);
+        publishInitialHeadingCog(smoothedHeadingRef.current);
       }, 1_000);
 
       headingSubscription = await Location.watchHeadingAsync((value) => {

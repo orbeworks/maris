@@ -1,5 +1,4 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import FontAwesome6 from "@expo/vector-icons/FontAwesome6";
 import { SymbolView } from "expo-symbols";
 import { useState } from "react";
@@ -25,11 +24,10 @@ type MapControlsPanelProps = {
   showMapButton?: boolean;
 };
 
-export type MapStyleMode = "bright" | "satellite" | "liberty";
+export type MapStyleMode = "bright" | "satellite";
 
 const MAP_STYLE_AFTER_PRESS: MapStyleMode[] = [
   "satellite",
-  "liberty",
   "bright",
 ];
 
@@ -48,9 +46,7 @@ export function MapControlsPanel({
   const globeAccessibilityLabel =
     iconIndex === 0
       ? "Show satellite map"
-      : iconIndex === 1
-        ? "Show Liberty map"
-        : "Show bright map";
+      : "Show bright map";
 
   return (
     <BlurPanel alignSelf="flex-end">
@@ -97,28 +93,15 @@ export function MapControlsPanel({
           }}
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
-          {iconIndex === 1 && isAndroid ? (
-            <MaterialIcons
-              color="#FFFFFF"
-              name="3d-rotation"
-              size={BLUR_PANEL_ICON_SIZE}
-            />
-          ) : iconIndex === 1 ? (
-            <SymbolView
-              name="view.3d"
-              size={BLUR_PANEL_ICON_SIZE}
-              tintColor="#FFFFFF"
-              type="monochrome"
-            />
-          ) : isAndroid ? (
+          {isAndroid ? (
             <FontAwesome6
               color="#FFFFFF"
-              name={iconIndex === 2 ? "language" : "globe"}
+              name={iconIndex === 1 ? "language" : "globe"}
               size={BLUR_PANEL_ICON_SIZE}
             />
           ) : (
             <SymbolView
-              name={iconIndex === 2 ? "globe" : "globe.americas.fill"}
+              name={iconIndex === 1 ? "globe" : "globe.americas.fill"}
               size={BLUR_PANEL_ICON_SIZE}
               tintColor="#FFFFFF"
               type="monochrome"
