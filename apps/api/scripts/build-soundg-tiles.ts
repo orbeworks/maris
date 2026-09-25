@@ -240,7 +240,9 @@ async function streamToMbtiles(
       crlfDelay: Infinity,
     });
     for await (const rawLine of lines) {
-      const line = rawLine.replace(/^\x1e/, "").trim();
+      const line = (
+        rawLine.charCodeAt(0) === 0x1e ? rawLine.slice(1) : rawLine
+      ).trim();
       if (!line) continue;
       const feature = JSON.parse(line) as SoundingFeature;
       inputFeatureCount += 1;

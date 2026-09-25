@@ -9,7 +9,15 @@
     "ios": "pnpm --filter @maris/mobile ios",
     "android": "pnpm --filter @maris/mobile android",
     "build": "pnpm --filter @maris/api build",
+    "lint": "eslint \"apps/{api,mobile}/**/*.{ts,tsx}\" && pnpm --dir apps/landing-page lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "typescript-eslint": "8.70.1"
   }
 }

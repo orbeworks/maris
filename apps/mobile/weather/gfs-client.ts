@@ -176,7 +176,6 @@ class GfsTileStore {
     const existing = this.inFlight.get(key);
     if (existing) return existing;
     const promise = (async () => {
-      try {
       const query = new URLSearchParams({ forecastHour: String(forecastHour) });
       const url = `${apiUrl.replace(/\/$/, '')}/weather/gfs/tiles/${tile.z}/${tile.x}/${tile.y}?${query}`;
       const requestSignal = signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS);
@@ -215,9 +214,6 @@ class GfsTileStore {
       file.create({ overwrite: true, intermediates: true });
       await file.write(bytes);
       return this.put(tile, forecastHour, grid, Date.now(), 'network', etag);
-      } catch (error) {
-        throw error;
-      }
     })().finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, promise);
     return promise;
@@ -384,15 +380,14 @@ export function useGfsViewport(
   const waitBeforeRetry = useCallback((revision: number) => {
     if (revision !== queueRevision.current) return Promise.resolve(false);
     return new Promise<boolean>((resolve) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (canRetry: boolean) => {
-        if (timer) clearTimeout(timer);
+        clearTimeout(timer);
         retryWaiters.current.delete(wake);
         resolve(canRetry && revision === queueRevision.current);
       };
       const wake = () => finish(false);
       retryWaiters.current.add(wake);
-      timer = setTimeout(() => finish(true), REQUEST_RETRY_DELAY_MS);
+      const timer = setTimeout(() => finish(true), REQUEST_RETRY_DELAY_MS);
     });
   }, []);
 

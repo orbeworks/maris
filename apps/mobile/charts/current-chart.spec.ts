@@ -15,7 +15,9 @@ test("chart requests use the actual map center/version and discard obsolete resp
       builder.onLoad({ filter: /.*/, namespace: "mock" }, () => ({ contents: 'export const AppState={currentState:"background",addEventListener:()=>({remove(){}})};' }));
     }}],
   });
-  const module = { exports: {} as { useChartInformation: Function } };
+  const module = {
+    exports: {} as { useChartInformation: (...args: any[]) => any },
+  };
   new Function("require", "module", "exports", output.outputFiles[0].text)(require, module, module.exports);
   const globals = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
   const previousAct = globals.IS_REACT_ACT_ENVIRONMENT;

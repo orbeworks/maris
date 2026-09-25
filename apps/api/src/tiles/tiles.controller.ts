@@ -36,7 +36,7 @@ export class TilesController {
   })
   async getTileJson(
     @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
+    @Res({ passthrough: true }) _response: Response,
   ): Promise<TileJsonDto> {
     const forwardedProtocol = request.get("x-forwarded-proto")?.split(",")[0];
     const protocol = forwardedProtocol ?? request.protocol;
