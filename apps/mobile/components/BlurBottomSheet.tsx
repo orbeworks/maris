@@ -1,5 +1,5 @@
 import { BlurView } from "expo-blur";
-import { PropsWithChildren, useEffect, useRef } from "react";
+import { PropsWithChildren, useCallback, useEffect, useRef } from "react";
 import {
   Animated,
   PanResponder,
@@ -25,6 +25,17 @@ export function BlurBottomSheet({
   const translateY = useRef(new Animated.Value(0)).current;
   const isDismissing = useRef(false);
   const lastCloseSignal = useRef(closeSignal);
+  const closeWithAnimation = useCallback(() => {
+    if (isDismissing.current) return;
+    isDismissing.current = true;
+    Animated.timing(translateY, {
+      toValue: 800,
+      duration: SHEET_ANIMATION_DURATION,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) onClose();
+    });
+  }, [onClose, translateY]);
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) =>
@@ -70,19 +81,7 @@ export function BlurBottomSheet({
     if (closeSignal === lastCloseSignal.current) return;
     lastCloseSignal.current = closeSignal;
     if (visible) closeWithAnimation();
-  }, [closeSignal, visible]);
-
-  function closeWithAnimation() {
-    if (isDismissing.current) return;
-    isDismissing.current = true;
-    Animated.timing(translateY, {
-      toValue: 800,
-      duration: SHEET_ANIMATION_DURATION,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) onClose();
-    });
-  }
+  }, [closeSignal, closeWithAnimation, visible]);
 
   if (!visible) return null;
 

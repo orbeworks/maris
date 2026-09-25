@@ -166,11 +166,17 @@ export default function App() {
     }
   }, [deviceLocation]);
 
+  const deviceHeading = deviceLocation?.heading;
+  const deviceLongitude = deviceLocation?.coordinate[0];
+  const deviceLatitude = deviceLocation?.coordinate[1];
+
   useEffect(() => {
     if (
       !courseUp ||
-      deviceLocation?.heading === null ||
-      deviceLocation?.heading === undefined
+      deviceHeading === null ||
+      deviceHeading === undefined ||
+      deviceLongitude === undefined ||
+      deviceLatitude === undefined
     ) {
       return;
     }
@@ -181,16 +187,11 @@ export default function App() {
     }
 
     cameraRef.current?.jumpTo({
-      center: deviceLocation.coordinate,
+      center: [deviceLongitude, deviceLatitude],
       zoom: lastZoom.current,
-      bearing: deviceLocation.heading,
+      bearing: deviceHeading,
     });
-  }, [
-    courseUp,
-    deviceLocation?.heading,
-    deviceLocation?.coordinate[0],
-    deviceLocation?.coordinate[1],
-  ]);
+  }, [courseUp, deviceHeading, deviceLatitude, deviceLongitude]);
 
   const scaleMaxWidth = Math.min(width - 96, 175);
   const gfs = useGfsViewport(
@@ -208,13 +209,7 @@ export default function App() {
   );
   const windViewportCoverage = useMemo(
     () => viewportTileCoverage(visibleBounds, (gfs.activeTileEntries ?? []).map((entry) => entry.tile)),
-    [
-      visibleBounds?.north,
-      visibleBounds?.south,
-      visibleBounds?.east,
-      visibleBounds?.west,
-      gfs.activeTileEntries,
-    ],
+    [visibleBounds, gfs.activeTileEntries],
   );
   const nativeSentTiles = useRef<{
     identity: string;

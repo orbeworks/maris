@@ -273,13 +273,14 @@ export function useGfsPoint(
   enabled = true,
 ) {
   const sourceZoom = sourceZoomForMapZoom(mapZoom);
+  const longitude = coordinate?.[0];
+  const latitude = coordinate?.[1];
   const targetTile = useMemo(
-    () => coordinate
-      ? tileForCoordinate(coordinate[0], coordinate[1], sourceZoom)
+    () => longitude !== undefined && latitude !== undefined
+      ? tileForCoordinate(longitude, latitude, sourceZoom)
       : null,
-    [coordinate?.[0], coordinate?.[1], sourceZoom],
+    [latitude, longitude, sourceZoom],
   );
-  const targetKey = targetTile ? tileKey(targetTile, 0) : '';
   const [loaded, setLoaded] = useState<CachedTile | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string>();
@@ -313,10 +314,15 @@ export function useGfsPoint(
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [apiUrl, enabled, targetKey]);
+  }, [apiUrl, enabled, targetTile]);
 
   const current = useMemo<GfsSample | null>(() => {
-    if (!coordinate || !targetTile || !loaded) return null;
+    if (
+      longitude === undefined ||
+      latitude === undefined ||
+      !targetTile ||
+      !loaded
+    ) return null;
     if (
       loaded.tile.z !== targetTile.z ||
       loaded.tile.x !== targetTile.x ||
@@ -324,8 +330,8 @@ export function useGfsPoint(
     ) return null;
     const sampled = sampleGridAtCoordinate(
       loaded.grid,
-      coordinate[1],
-      coordinate[0],
+      latitude,
+      longitude,
     );
     return sampled
       ? {
@@ -334,7 +340,7 @@ export function useGfsPoint(
           forecastHour: loaded.grid.forecastHour,
         }
       : null;
-  }, [coordinate?.[0], coordinate?.[1], loaded, targetKey]);
+  }, [latitude, loaded, longitude, targetTile]);
 
   return {
     current,
@@ -362,7 +368,7 @@ export function useGfsViewport(
   const [cachedAt, setCachedAt] = useState<number>();
   const selectedSource = useMemo(
     () => sourceZoomForViewport(bounds, zoom, qualityPenalty, maxFieldDimension),
-    [bounds?.north, bounds?.south, bounds?.east, bounds?.west, maxFieldDimension, qualityPenalty, zoom],
+    [bounds, maxFieldDimension, qualityPenalty, zoom],
   );
   const sourceZoom = selectedSource.sourceZoom;
   const activeJob = useRef<ViewportJob | null>(null);
@@ -456,7 +462,7 @@ export function useGfsViewport(
       }
       if (pendingJob.current) void runQueue();
     }
-  }, [apiUrl]);
+  }, [apiUrl, waitBeforeRetry]);
 
   const enqueueViewport = useCallback((job: ViewportJob) => {
     if (
@@ -492,7 +498,7 @@ export function useGfsViewport(
       });
     }, REQUEST_DEBOUNCE_MS);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [apiUrl, bounds?.north, bounds?.south, bounds?.east, bounds?.west, enabled, enqueueViewport, selectedSource, sourceZoom]);
+  }, [apiUrl, bounds, enabled, enqueueViewport, selectedSource, sourceZoom]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
@@ -522,7 +528,7 @@ export function useGfsViewport(
   const activeCachedTiles = useMemo(() => {
     void tilesVersion;
     return gfsTileStore.snapshot(requestedTiles, 0);
-  }, [computedRequestedKey, tilesVersion]);
+  }, [requestedTiles, tilesVersion]);
   const composedPackage = useMemo(() => packageFromTiles(activeCachedTiles), [activeCachedTiles]);
   const activeTiles = useMemo(() => {
     if (activeCachedTiles.length <= 1) return activeCachedTiles.map((item) => item.grid);
@@ -541,7 +547,17 @@ export function useGfsViewport(
   const displayedPackage = useRef<GfsPackage | null>(null);
   if (composedPackage) displayedPackage.current = composedPackage;
   const packageData = composedPackage ?? displayedPackage.current;
-  const samples = useMemo(() => sampleGfsPackageAtCoordinate(packageData, coordinate), [packageData, coordinate?.[0], coordinate?.[1]]);
+  const coordinateLongitude = coordinate?.[0];
+  const coordinateLatitude = coordinate?.[1];
+  const samples = useMemo(
+    () => sampleGfsPackageAtCoordinate(
+      packageData,
+      coordinateLongitude !== undefined && coordinateLatitude !== undefined
+        ? [coordinateLongitude, coordinateLatitude]
+        : null,
+    ),
+    [coordinateLatitude, coordinateLongitude, packageData],
+  );
   return {
     packageData,
     activeTiles,
