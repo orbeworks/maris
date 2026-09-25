@@ -33,8 +33,9 @@ export const GFS_BINARY_VERSION = 1;
 export function encodeGfsTile(grid: GfsGrid): Buffer {
   const fields = TILE_FIELDS.filter((field) => {
     const values = grid.fields[field];
-    return Boolean(values && values.length === grid.width * grid.height);
+    return Boolean(values?.length === grid.width * grid.height);
   });
+
   const header: GfsBinaryTileHeader = {
     version: GFS_BINARY_VERSION,
     model: grid.model,
@@ -50,12 +51,14 @@ export function encodeGfsTile(grid: GfsGrid): Buffer {
     units: grid.units,
     fields: [...fields],
   };
+
   const headerBytes = Buffer.from(JSON.stringify(header), "utf8");
   const count = grid.width * grid.height;
   const bytesPerField = count + count * 4;
   const output = Buffer.alloc(
     12 + headerBytes.length + fields.length * bytesPerField,
   );
+
   output.write(GFS_BINARY_MAGIC, 0, 4, "ascii");
   output.writeUInt16LE(GFS_BINARY_VERSION, 4);
   output.writeUInt16LE(0, 6);
@@ -63,6 +66,7 @@ export function encodeGfsTile(grid: GfsGrid): Buffer {
   headerBytes.copy(output, 12);
 
   let offset = 12 + headerBytes.length;
+
   for (const field of fields) {
     const values = grid.fields[field]!;
     for (let index = 0; index < count; index += 1) {
@@ -73,6 +77,7 @@ export function encodeGfsTile(grid: GfsGrid): Buffer {
     }
     offset += bytesPerField;
   }
+
   return output;
 }
 
@@ -86,21 +91,30 @@ export function decodeGfsTile(buffer: Uint8Array): {
   ) {
     throw new Error("Invalid GFS tile magic");
   }
+
   const view = new DataView(
     buffer.buffer,
     buffer.byteOffset,
     buffer.byteLength,
   );
-  if (view.getUint16(4, true) !== GFS_BINARY_VERSION)
+
+  if (view.getUint16(4, true) !== GFS_BINARY_VERSION) {
     throw new Error("Unsupported GFS tile version");
+  }
   const headerLength = view.getUint32(8, true);
+
   const header = JSON.parse(
     new TextDecoder().decode(buffer.slice(12, 12 + headerLength)),
   ) as GfsBinaryTileHeader;
+
   const count = header.width * header.height;
+
   const bytesPerField = count + count * 4;
+
   let offset = 12 + headerLength;
+
   const fields: Partial<Record<GfsFieldName, Array<number | null>>> = {};
+
   for (const field of header.fields) {
     if (offset + bytesPerField > buffer.byteLength)
       throw new Error("Truncated GFS tile");
